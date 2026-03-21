@@ -1,0 +1,37 @@
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany } from 'typeorm';
+import { Team } from '../../teams/entities/team.entity';
+import { Role } from '../../roles/entities/role.entity';
+import { UserStatus } from '../../common/enums';
+
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @Column({ nullable: true })
+  phone: string;
+
+  @Column({ select: false }) // Exclude password from default SELECT queries
+  password: string;
+
+  @Column({ type: 'varchar', length: 20, default: UserStatus.PENDING })
+  status: UserStatus;
+
+  @ManyToOne(() => Team, team => team.users, { nullable: true, onDelete: 'SET NULL' })
+  team: Team; // Null for independent or global users until assigned
+
+  @ManyToOne(() => Role, role => role.users, { nullable: true, onDelete: 'SET NULL' })
+  role: Role; // Null initially for onboarding request approvals
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
