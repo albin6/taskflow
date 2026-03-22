@@ -8,18 +8,25 @@ export default function AdminAuditLogPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [action, setAction] = useState('');
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<any>({ total: 0, lastPage: 1 });
+
+  useEffect(() => {
+    setPage(1); // Reset on filter change
+  }, [action]);
 
   useEffect(() => {
     fetchLogs();
-  }, [action]);
+  }, [action, page]);
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
       const res = await api.get('/audit-logs', {
-         params: { action: action || undefined }
+         params: { action: action || undefined, page }
       });
-      setLogs(res.data);
+      setLogs(res.data.data);
+      setMeta(res.data.meta);
     } catch (err) {
       console.error('Failed to fetch audit logs', err);
     } finally {
@@ -83,6 +90,31 @@ export default function AdminAuditLogPage() {
               )}
             </tbody>
           </table>
+
+          <div className="flex items-center justify-between p-4 border-t border-border bg-muted/10 text-xs sm:text-sm">
+             <div className="text-muted-foreground">
+                Total: <span className="font-semibold text-foreground">{meta.total}</span> logs
+             </div>
+             <div className="flex items-center gap-2">
+                <button 
+                  disabled={page <= 1 || loading} 
+                  onClick={() => setPage(p => p - 1)}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                   Previous
+                </button>
+                <span className="text-muted-foreground">
+                   Page <span className="font-semibold text-foreground">{page}</span> of {meta.lastPage}
+                </span>
+                <button 
+                  disabled={page >= meta.lastPage || loading} 
+                  onClick={() => setPage(p => p + 1)}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                   Next
+                </button>
+             </div>
+          </div>
         </div>
       </div>
     </div>

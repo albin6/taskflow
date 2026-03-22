@@ -10,8 +10,8 @@ export class AuditService {
     private readonly auditLogRepository: Repository<AuditLog>,
   ) {}
 
-  async findAll(actor: any, queryParams: any): Promise<AuditLog[]> {
-    const { action, actorId, startDate, endDate } = queryParams;
+  async findAll(actor: any, queryParams: any): Promise<{ data: AuditLog[], meta: any }> {
+    const { action, actorId, startDate, endDate, page = 1, limit = 10 } = queryParams;
 
     const query = this.auditLogRepository
       .createQueryBuilder('log')
@@ -45,7 +45,20 @@ export class AuditService {
       });
     }
 
-    return query.getMany();
+    const skipAmount = (page - 1) * limit;
+    query.skip(skipAmount).take(limit);
+
+    const [data, total] = await query.getManyAndCount();
+
+    return {
+      data,
+      meta: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string): Promise<AuditLog> {

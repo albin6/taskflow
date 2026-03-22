@@ -18,8 +18,10 @@ export class AuditController {
     @Query('actorId') actorId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
   ) {
-    return this.auditService.findAll(req.user, { action, actorId, startDate, endDate });
+    return this.auditService.findAll(req.user, { action, actorId, startDate, endDate, page, limit });
   }
 
   @Get(':id')
