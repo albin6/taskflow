@@ -32,7 +32,7 @@ export class SeedService implements OnModuleInit {
         permissions: ['ALL_ACCESS'],
       });
       await this.roleRepository.save(adminRole);
-      console.log('✅ Global Admin role seeded successfully.');
+      console.log('Global Admin role seeded successfully.');
     }
     return adminRole;
   }
@@ -50,7 +50,7 @@ export class SeedService implements OnModuleInit {
         role: adminRole,
       });
       await this.userRepository.save(user);
-      console.log('✅ Default Admin User seeded: admin@taskflow.com / admin123');
+      console.log('Default Admin User seeded: admin@taskflow.com / admin123');
     }
   }
 
@@ -60,7 +60,7 @@ export class SeedService implements OnModuleInit {
       if (!role.permissions.includes('MANAGE_USERS')) {
          role.permissions.push('MANAGE_USERS');
          await this.roleRepository.save(role);
-         console.log(`✅ Patched Team Lead role with MANAGE_USERS for team setup.`);
+         console.log(`Patched Team Lead role with MANAGE_USERS for team setup.`);
       }
     }
   }
