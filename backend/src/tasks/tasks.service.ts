@@ -80,7 +80,16 @@ export class TasksService {
       .orderBy('task.createdAt', 'DESC');
 
     if (actor.level !== 0 && actor.teamId) {
-      query.where('team.id = :teamId', { teamId: actor.teamId });
+      if (actor.level <= 2) {
+         // Managers (Heads, Leads) see all team tasks
+         query.where('team.id = :teamId', { teamId: actor.teamId });
+      } else {
+         // Base roles (Executives, etc) only see tasks they created or are assigned to
+         query.where('team.id = :teamId AND (creator.id = :userId OR assignee.id = :userId)', { 
+             teamId: actor.teamId, 
+             userId: actor.userId 
+         });
+      }
     }
 
     query.andWhere('task.status != :approved', { approved: 'APPROVED' });
@@ -129,6 +138,22 @@ export class TasksService {
 
     if (updateTaskDto.status && ['APPROVED', 'REJECTED'].includes(updateTaskDto.status as any)) {
       throw new ForbiddenException('Status transitions to APPROVED or REJECTED must use explicit approval actions.');
+    }
+
+    if (updateTaskDto.status && updateTaskDto.status !== task.status) {
+       // User requirement: "i only want the status updation of a task to be done by the user who created the task and the user who got assigned the task."
+       if (actor.level !== 0 && !isOwner && !isAssignee) {
+          throw new ForbiddenException('Only the task creator or assignee can update the task status.');
+       }
+
+       // User requirement: "they can change the status to previous... it shouldnt happend like that."
+       const statusOrder: Record<string, number> = { 'TODO': 1, 'IN_PROGRESS': 2, 'BLOCKED': 2, 'DONE': 3, 'APPROVED': 4, 'REJECTED': 5 };
+       const currentStatusLevel = statusOrder[task.status] || 0;
+       const newStatusLevel = statusOrder[updateTaskDto.status as any] || 0;
+       
+       if (newStatusLevel < currentStatusLevel) {
+          throw new ConflictException('Task status cannot be moved backwards manually.');
+       }
     }
 
     if (updateTaskDto.title) task.title = updateTaskDto.title;
