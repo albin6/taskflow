@@ -29,6 +29,12 @@ export class User {
   @ManyToOne(() => Role, role => role.users, { nullable: true, onDelete: 'SET NULL' })
   role: Role; // Null initially for onboarding request approvals
 
+  @Column({ nullable: true, select: false })
+  resetPasswordToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true, select: false })
+  resetPasswordExpires: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

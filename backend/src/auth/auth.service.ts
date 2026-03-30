@@ -1,8 +1,9 @@
-import { Injectable, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, LessThan, MoreThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 import { User } from '../users/entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
@@ -12,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { UserStatus, ApprovalStatus } from '../common/enums';
 import { ApprovalRequest } from '../approvals/entities/approval-request.entity';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +28,7 @@ export class AuthService {
     private readonly approvalRepository: Repository<ApprovalRequest>,
     private readonly jwtService: JwtService,
     private readonly approvalsService: ApprovalsService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<{ message: string }> {
@@ -134,5 +137,44 @@ export class AuthService {
       where: { team: { id: teamId } },
       select: ['id', 'name', 'level'],
     });
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      // For security, don't reveal that the user doesn't exist
+      return { message: 'If an account exists with this email, you will receive reset instructions shortly.' };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    await this.userRepository.save(user);
+    await this.mailService.sendResetPasswordEmail(user.email, token);
+
+    return { message: 'If an account exists with this email, you will receive reset instructions shortly.' };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.resetPasswordToken')
+      .addSelect('user.resetPasswordExpires')
+      .where('user.resetPasswordToken = :token', { token })
+      .andWhere('user.resetPasswordExpires > :now', { now: new Date() })
+      .getOne();
+
+    if (!user) {
+      throw new BadRequestException('Password reset token is invalid or has expired.');
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
+    await this.userRepository.save(user);
+
+    return { message: 'Password has been reset successfully. You can now log in.' };
   }
 }
