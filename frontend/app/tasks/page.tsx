@@ -59,6 +59,7 @@ export default function TasksPage() {
   const [assigneeId, setAssigneeId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   const columns = [
     { id: 'TODO', label: 'To Do', icon: CheckSquare, color: 'text-blue-500' },
@@ -153,12 +154,19 @@ export default function TasksPage() {
        setAssigneeId('');
        setDueDate('');
     }
+    setShowErrors(false);
     setIsModalOpen(true);
   };
 
   const handleCreateOrUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    
+    if (!assigneeId) {
+      setShowErrors(true);
+      addToast('Please assign the task to at least one user', 'error');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -179,6 +187,7 @@ export default function TasksPage() {
       }
 
       setIsModalOpen(false);
+      setShowErrors(false);
       fetchTasks(1, true); // Refresh from first page
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Failed to save task.', 'error');
@@ -390,8 +399,15 @@ export default function TasksPage() {
                      </div>
                      <div>
                         <label className="block text-xs font-medium mb-1">Assignee</label>
-                        <select value={assigneeId} onChange={(e)=>setAssigneeId(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
-                           <option value="">Unassigned</option>
+                        <select 
+                           value={assigneeId} 
+                           onChange={(e)=>{
+                              setAssigneeId(e.target.value);
+                              if (e.target.value) setShowErrors(false);
+                           }} 
+                           className={`w-full px-3 py-2 rounded-lg border bg-background text-sm transition-all ${showErrors && !assigneeId ? 'border-red-500 ring-2 ring-red-500/20' : 'border-border'}`}
+                        >
+                           <option value="" disabled>Select Assignee...</option>
                            {members.filter(m => {
                               const memberLevel = m.role?.level ?? 99;
                               const actorLevel = user?.level ?? 99;

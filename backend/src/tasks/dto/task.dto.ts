@@ -23,8 +23,8 @@ export class CreateTaskDto {
   dueDate?: string;
 
   @IsUUID()
-  @IsOptional()
-  assigneeId?: string;
+  @IsNotEmpty({ message: 'At least one team member must be assigned to the task' })
+  assigneeId: string;
 }
 
 export class UpdateTaskDto {
@@ -50,5 +50,6 @@ export class UpdateTaskDto {
 
   @IsUUID()
   @IsOptional()
+  @IsNotEmpty({ message: 'Task must have an assignee' })
   assigneeId?: string;
 }
