@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '../../lib/axios';
-import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X } from 'lucide-react';
+import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
 export default function TasksPage() {
@@ -23,6 +23,7 @@ export default function TasksPage() {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [assigneeId, setAssigneeId] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const columns = [
@@ -87,11 +88,13 @@ export default function TasksPage() {
        setDescription(task.description || '');
        setPriority(task.priority);
        setAssigneeId(task.assignee?.id || '');
+       setDueDate(task.dueDate ? task.dueDate.split('T')[0] : '');
     } else {
        setTitle('');
        setDescription('');
        setPriority('MEDIUM');
        setAssigneeId('');
+       setDueDate('');
     }
     setIsModalOpen(true);
   };
@@ -107,6 +110,7 @@ export default function TasksPage() {
         description,
         priority,
         assigneeId: assigneeId || null,
+        dueDate: dueDate || null,
       };
 
       if (selectedTask) {
@@ -186,6 +190,11 @@ export default function TasksPage() {
      return isAssigner || isManager || user?.level === 0;
   };
 
+  const isOverdue = (task: any) => {
+     if (!task.dueDate || task.status === 'DONE') return false;
+     return new Date(task.dueDate) < new Date();
+  };
+
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -231,7 +240,7 @@ export default function TasksPage() {
                   key={task.id}
                   draggable={true} // Anyone can drag their items to change status
                   onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="bg-card p-4 rounded-xl border border-border/80 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing hover:border-border transition-all space-y-2 group relative"
+                  className={`bg-card p-4 rounded-xl border ${isOverdue(task) ? 'border-red-500/50 shadow-red-500/5' : 'border-border/80'} shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing hover:border-border transition-all space-y-2 group relative`}
                 >
                   <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-card/80 backdrop-blur-xs rounded-md p-0.5 border border-border/40">
                      {canManageTask(task) && (
@@ -254,6 +263,14 @@ export default function TasksPage() {
                      <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
                   )}
                   
+                  {task.dueDate && (
+                     <div className={`flex items-center gap-1 text-[10px] font-medium ${isOverdue(task) ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        <Calendar className="h-3 w-3" />
+                        {new Date(task.dueDate).toLocaleDateString()}
+                        {isOverdue(task) && <AlertCircle className="h-2.5 w-2.5 ml-auto" />}
+                     </div>
+                  )}
+
                   {canApprove(task) && (
                      <div className="flex gap-2 pt-1">
                         <button onClick={() => handleApproveTask(task.id)} className="flex-1 flex items-center justify-center gap-1 text-xxs bg-green-500/10 text-green-600 hover:bg-green-500/20 py-1 rounded font-medium"><Check className="h-3 w-3" /> Approve</button>
@@ -316,9 +333,21 @@ export default function TasksPage() {
                         </select>
                      </div>
                   </div>
+                  <div>
+                     <label className="block text-xs font-medium mb-1">Deadline</label>
+                     <div className="relative">
+                        <input 
+                           type="date" 
+                           value={dueDate} 
+                           onChange={(e)=>setDueDate(e.target.value)} 
+                           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                        />
+                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                     </div>
+                  </div>
                   <div className="flex gap-2 justify-end pt-3 border-t border-border mt-1">
                      <button type="button" onClick={()=>setIsModalOpen(false)} className="px-4 py-2 rounded-lg border border-border hover:bg-muted font-medium text-sm">Cancel</button>
-                     <button type="submit" disabled={submitting} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm">
+                     <button type="submit" disabled={submitting} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm transition-all focus:ring-2 focus:ring-primary/50">
                         {submitting ? 'Saving...' : selectedTask ? 'Update' : 'Create'}
                      </button>
                   </div>
@@ -329,3 +358,4 @@ export default function TasksPage() {
     </div>
   );
 }
+
