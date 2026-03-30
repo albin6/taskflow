@@ -62,7 +62,9 @@ export class TasksService {
     return this.taskRepository.save(task);
   }
 
-  async findAll(actor: any): Promise<Task[]> {
+  async findAll(actor: any, page = 1, limit = 20): Promise<{ tasks: Task[], total: number }> {
+    const skip = (page - 1) * limit;
+    
     const query = this.taskRepository
       .createQueryBuilder('task')
       .leftJoinAndSelect('task.assignee', 'assignee')
@@ -93,8 +95,13 @@ export class TasksService {
     }
 
     query.andWhere('task.status != :approved', { approved: 'APPROVED' });
-
-    return query.getMany();
+    
+    const [tasks, total] = await query
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+    
+    return { tasks, total };
   }
 
   async findOne(id: string): Promise<Task> {

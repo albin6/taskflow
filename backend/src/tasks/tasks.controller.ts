@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,9 +18,13 @@ export class TasksController {
   }
 
   @Get()
-  findAll(@Req() req: any) {
+  findAll(
+    @Req() req: any,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+  ) {
     // Standard authenticated users can view tasks (within their team scope filter managed in service)
-    return this.tasksService.findAll(req.user);
+    return this.tasksService.findAll(req.user, +page, +limit);
   }
 
   @Get(':id')

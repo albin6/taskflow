@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, Index } from 'typeorm';
 import { Team } from '../../teams/entities/team.entity';
 import { Role } from '../../roles/entities/role.entity';
 import { UserStatus } from '../../common/enums';
@@ -23,9 +23,11 @@ export class User {
   @Column({ type: 'varchar', length: 20, default: UserStatus.PENDING })
   status: UserStatus;
 
+  @Index()
   @ManyToOne(() => Team, team => team.users, { nullable: true, onDelete: 'SET NULL' })
   team: Team; // Null for independent or global users until assigned
 
+  @Index()
   @ManyToOne(() => Role, role => role.users, { nullable: true, onDelete: 'SET NULL' })
   role: Role; // Null initially for onboarding request approvals
 

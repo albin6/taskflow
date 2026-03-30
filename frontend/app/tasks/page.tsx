@@ -2,16 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import api from '../../lib/axios';
-import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import ConfirmationModal from '../../components/ui/confirmation-modal';
 import { ToastContainer } from '../../components/ui/toast';
+import TaskCard from '../../components/tasks/task-card';
+import { useCallback, useRef } from 'react';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastTaskElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (loading || loadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        setPage(prevPage => prevPage + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, loadingMore, hasMore]);
  
   // Toast State
   const [toasts, setToasts] = useState<any[]>([]);
@@ -49,19 +67,32 @@ export default function TasksPage() {
   ];
 
   useEffect(() => {
-    fetchTasks();
+    fetchTasks(1, true);
     fetchMembers();
   }, []);
 
-  const fetchTasks = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (page > 1) {
+      fetchTasks(page, false);
+    }
+  }, [page]);
+
+  const fetchTasks = async (pageNum: number, isInitial: boolean) => {
+    if (isInitial) setLoading(true);
+    else setLoadingMore(true);
+    
     try {
-      const res = await api.get('/tasks');
-      setTasks(res.data);
+      const res = await api.get(`/tasks?page=${pageNum}&limit=20`);
+      const { tasks: newTasks, total: totalCount } = res.data;
+      
+      setTasks(prev => isInitial ? newTasks : [...prev, ...newTasks]);
+      setTotal(totalCount);
+      setHasMore(tasks.length + newTasks.length < totalCount);
     } catch (err) {
       console.error('Failed to fetch tasks', err);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      else setLoadingMore(false);
     }
   };
 
@@ -88,7 +119,8 @@ export default function TasksPage() {
     try {
       await api.patch(`/tasks/${taskId}`, { status: targetStatus });
       addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
-      fetchTasks();
+      // Update local state optimistically for speed
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
     } catch (err: any) {
       const status = err.response?.status;
       if (status === 409) {
@@ -147,7 +179,7 @@ export default function TasksPage() {
       }
 
       setIsModalOpen(false);
-      fetchTasks();
+      fetchTasks(1, true); // Refresh from first page
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Failed to save task.', 'error');
     } finally {
@@ -167,7 +199,7 @@ export default function TasksPage() {
       addToast('Task deleted successfully', 'success');
       setIsConfirmModalOpen(false);
       setTaskToDelete(null);
-      fetchTasks();
+      fetchTasks(1, true); // Refresh
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Failed to delete task.', 'error');
       console.error('Failed to delete task', err);
@@ -177,42 +209,46 @@ export default function TasksPage() {
   const handleApproveTask = async (taskId: string) => {
     try {
       await api.patch(`/tasks/${taskId}/approve`);
-      fetchTasks();
+      setTasks(prev => prev.filter(t => t.id !== taskId)); // Remove since it's approved
+      addToast('Task approved!', 'success');
     } catch (err) {
       console.error('Failed to approve task', err);
+      addToast('Failed to approve task', 'error');
     }
   };
 
   const handleRejectTask = async (taskId: string) => {
     try {
       await api.patch(`/tasks/${taskId}/reject`);
-      fetchTasks();
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'IN_PROGRESS' } : t));
+      addToast('Task rejected - moved back to In Progress', 'info');
     } catch (err) {
       console.error('Failed to reject task', err);
+      addToast('Failed to reject task', 'error');
     }
   };
 
   // Determine if actor can manage total details
-  const canManageTask = (task: any) => {
+  const canManageTask = (task: any): boolean => {
      const isOwner = task.creator?.id === user?.userId;
      const isAssignee = task.assignee?.id === user?.userId;
-     const isManager = user?.level !== undefined && user.level <= 2;
+     const isManager = (user?.level !== undefined && user.level <= 2);
      
      if (isAssignee && !isOwner && !isManager) return false;
-     return user?.level === 0 || isOwner || isManager || canEditGeneral;
+     return !!(user?.level === 0 || isOwner || isManager || canEditGeneral);
   };
 
-  const canDropTask = (task: any) => {
+  const canDropTask = (task: any): boolean => {
      const isOwner = task.creator?.id === user?.userId;
      const isAssignee = task.assignee?.id === user?.userId;
-     const isManager = user?.level !== undefined && user.level <= 2;
+     const isManager = (user?.level !== undefined && user.level <= 2);
      
-     return isOwner || isManager || isAssignee || canEditGeneral;
+     return !!(isOwner || isManager || isAssignee || canEditGeneral);
   };
 
-  const canApprove = (task: any) => {
+  const canApprove = (task: any): boolean => {
      const isAssigner = task.assigner?.id === user?.userId;
-     const isManager = user?.level !== undefined && user.level <= 2;
+     const isManager = (user?.level !== undefined && user.level <= 2);
      const isSelfAssigned = task.assignee?.id === task.creator?.id;
 
      if (task.status !== 'DONE') return false;
@@ -220,10 +256,10 @@ export default function TasksPage() {
      if (isSelfAssigned) {
         const actorLevel = user?.level ?? 99;
         const creatorLevel = task.creator?.creator_role?.level ?? 99;
-        return actorLevel < creatorLevel || user?.level === 0; 
+        return !!(actorLevel < creatorLevel || user?.level === 0); 
      }
 
-     return isAssigner || isManager || user?.level === 0;
+     return !!(isAssigner || isManager || user?.level === 0);
   };
 
   const isOverdue = (task: any) => {
@@ -286,87 +322,35 @@ export default function TasksPage() {
  
             {/* Scrollable Task Area */}
             <div className="p-3 space-y-4 flex-1 overflow-y-auto pb-8 custom-scrollbar">
-              {tasks.filter(t => t.status === col.id).map((task) => (
-                <div
-                  key={task.id}
-                  draggable={true}
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  className={`group relative bg-card rounded-xl border-l-[4px] border border-border/60 hover:border-border/80 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-grab active:cursor-grabbing overflow-hidden ${
-                    priorityColors[task.priority] || 'border-l-primary'
-                  } ${isOverdue(task) ? 'ring-1 ring-red-500/30' : ''}`}
-                >
-                  <div className="p-4 space-y-3 relative z-10">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="font-bold text-foreground text-[15px] leading-snug tracking-tight group-hover:text-primary transition-colors line-clamp-2">
-                        {task.title}
-                      </h3>
-                      
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className={`text-[10px] px-2 py-1 rounded-md font-extrabold uppercase tracking-widest shadow-xs ${
-                          task.priority === 'HIGH' ? 'bg-red-500/15 text-red-600' :
-                          task.priority === 'MEDIUM' ? 'bg-amber-500/15 text-amber-600' : 'bg-green-500/15 text-green-600'
-                        }`}>
-                          {task.priority}
-                        </span>
-                        
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 origin-right">
-                          {canManageTask(task) && (
-                            <>
-                              <button onClick={() => openModal(task)} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted border border-border/40 rounded-lg transition-all"><Edit3 className="h-3.5 w-3.5" /></button>
-                              <button onClick={() => confirmDeleteTask(task.id)} className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-500/10 border border-border/40 rounded-lg transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {task.description && (
-                       <p className="text-xs text-muted-foreground leading-relaxed font-medium line-clamp-2 opacity-80 group-hover:opacity-100 transition-opacity whitespace-pre-wrap">
-                        {task.description}
-                       </p>
-                    )}
-                    
-                    {task.dueDate && (
-                       <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold ${
-                        isOverdue(task) ? 'bg-red-500/10 text-red-600 ring-1 ring-red-500/20' : 'bg-muted/50 text-muted-foreground/80'
-                       }`}>
-                          <Calendar className={`h-3 w-3 ${isOverdue(task) ? 'text-red-500' : 'text-muted-foreground'}`} />
-                          {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {isOverdue(task) && <AlertCircle className="h-3 w-3 animate-pulse" />}
-                       </div>
-                    )}
-
-                    {canApprove(task) && (
-                       <div className="flex gap-2 pt-1 border-t border-border/30 mt-1">
-                          <button onClick={() => handleApproveTask(task.id)} className="flex-1 flex items-center justify-center gap-1.5 text-[10px] bg-green-500/10 text-green-600 hover:bg-green-500/20 py-2 rounded-lg font-bold shadow-xs transition-all active:scale-95 border border-green-500/20"><Check className="h-3 w-3 stroke-[3px]" /> Approve</button>
-                          <button onClick={() => handleRejectTask(task.id)} className="flex-1 flex items-center justify-center gap-1.5 text-[10px] bg-red-500/10 text-red-600 hover:bg-red-500/20 py-2 rounded-lg font-bold shadow-xs transition-all active:scale-95 border border-red-500/20"><X className="h-3 w-3 stroke-[3px]" /> Reject</button>
-                       </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/40 mt-2">
-                       <div className="flex items-center gap-2 overflow-hidden group/meta">
-                          <div className="h-6 w-6 shrink-0 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shadow-xs">
-                             {getInitials(task.assignee?.name || 'U')}
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                             <span className="text-[9px] uppercase tracking-tighter text-muted-foreground/60 font-black">Assignee</span>
-                             <span className="text-[11px] font-bold text-foreground/80 truncate leading-tight group-hover/meta:text-primary transition-colors">{task.assignee?.name || 'Unassigned'}</span>
-                          </div>
-                       </div>
-                       <div className="flex items-center gap-2 overflow-hidden grayscale hover:grayscale-0 transition-all group/meta">
-                         <div className="h-6 w-6 shrink-0 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground shadow-xs">
-                             {getInitials(task.creator?.name || 'S')}
-                          </div>
-                         <div className="flex flex-col min-w-0">
-                             <span className="text-[9px] uppercase tracking-tighter text-muted-foreground/60 font-black">Reporter</span>
-                             <span className="text-[11px] font-bold text-muted-foreground truncate leading-tight">{task.creator?.name || 'Self'}</span>
-                          </div>
-                       </div>
-                    </div>
+              {tasks.filter(t => t.status === col.id).map((task, index, filteredTasks) => {
+                const isLastTask = index === filteredTasks.length - 1;
+                return (
+                  <div key={task.id} ref={isLastTask ? lastTaskElementRef : null}>
+                    <TaskCard
+                      task={task}
+                      user={user}
+                      priorityColors={priorityColors}
+                      isOverdue={isOverdue}
+                      canManageTask={canManageTask}
+                      canApprove={canApprove}
+                      getInitials={getInitials}
+                      onDragStart={handleDragStart}
+                      openModal={openModal}
+                      confirmDeleteTask={confirmDeleteTask}
+                      handleApproveTask={handleApproveTask}
+                      handleRejectTask={handleRejectTask}
+                    />
                   </div>
+                );
+              })}
+              
+              {loadingMore && (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ))}
-              {tasks.filter(t => t.status === col.id).length === 0 && (
+              )}
+
+              {tasks.filter(t => t.status === col.id).length === 0 && !loading && (
                  <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-border/40 animate-in fade-in zoom-in-95 duration-300 bg-muted/5">
                     <div className="bg-muted/30 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3 border border-border/20 shadow-xs">
                        <CheckSquare className="h-5 w-5 text-muted-foreground/40" />

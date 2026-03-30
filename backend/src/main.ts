@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { setDefaultResultOrder } from 'node:dns';
+import * as compression from 'compression';
 
 // Force DNS resolution to prioritize IPv4 over IPv6. 
 // This is critical for connecting to external services (like Gmail SMTP) 
@@ -10,6 +11,9 @@ setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  // Enable compression for large responses
+  app.use(compression());
   
   // Enable CORS for frontend requests
   app.enableCors({

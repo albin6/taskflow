@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Team } from './entities/team.entity';
@@ -7,6 +7,8 @@ import { User } from '../users/entities/user.entity';
 import { CreateTeamDto, UpdateTeamDto } from './dto/team.dto';
 import { Permissions } from '../common/constants/permissions';
 import { UserStatus } from '../common/enums';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class TeamsService {
@@ -17,6 +19,7 @@ export class TeamsService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async create(createTeamDto: CreateTeamDto): Promise<Team> {
@@ -29,6 +32,8 @@ export class TeamsService {
 
     const team = this.teamRepository.create({ name });
     const savedTeam = await this.teamRepository.save(team);
+    
+    await this.cacheManager.del('teams_list');
 
     // Auto-create permanent Head and Lead roles for the team
     const headRole = this.roleRepository.create({
@@ -69,7 +74,12 @@ export class TeamsService {
   }
 
   async findAll(): Promise<Team[]> {
-    return this.teamRepository.find({ relations: ['roles'] });
+    const cached = await this.cacheManager.get<Team[]>('teams_list');
+    if (cached) return cached;
+
+    const teams = await this.teamRepository.find({ relations: ['roles'] });
+    await this.cacheManager.set('teams_list', teams);
+    return teams;
   }
 
   async findOne(id: string): Promise<Team> {
@@ -83,12 +93,15 @@ export class TeamsService {
   async update(id: string, updateTeamDto: UpdateTeamDto): Promise<Team> {
     const team = await this.findOne(id);
     team.name = updateTeamDto.name;
-    return this.teamRepository.save(team);
+    const updated = await this.teamRepository.save(team);
+    await this.cacheManager.del('teams_list');
+    return updated;
   }
 
   async remove(id: string): Promise<{ message: string }> {
     const team = await this.findOne(id);
     await this.teamRepository.remove(team);
+    await this.cacheManager.del('teams_list');
     return { message: `Team "${team.name}" deleted successfully.` };
   }
 

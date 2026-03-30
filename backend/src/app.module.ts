@@ -15,10 +15,16 @@ import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { AuditLog } from './audit/entities/audit-log.entity';
 import { TasksModule } from './tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 60 * 10, // 10 Minutes Default TTL
+      max: 100, // Max items in cache
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
