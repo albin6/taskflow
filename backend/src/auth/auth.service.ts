@@ -142,8 +142,7 @@ export class AuthService {
   async forgotPassword(email: string): Promise<{ message: string }> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      // For security, don't reveal that the user doesn't exist
-      return { message: 'If an account exists with this email, you will receive reset instructions shortly.' };
+      throw new NotFoundException('No account found with this email address.');
     }
 
     const token = crypto.randomBytes(32).toString('hex');
