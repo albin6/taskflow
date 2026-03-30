@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { setDefaultResultOrder } from 'node:dns';
-import * as compression from 'compression';
+import compression from 'compression';
 
 // Force DNS resolution to prioritize IPv4 over IPv6. 
 // This is critical for connecting to external services (like Gmail SMTP) 
