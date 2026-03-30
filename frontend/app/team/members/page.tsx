@@ -84,7 +84,7 @@ export default function TeamMembersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 h-full overflow-y-auto pb-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Workspace</h1>

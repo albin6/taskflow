@@ -258,7 +258,7 @@ export default function TasksPage() {
               </div>
             </div>
 
-            <div className="p-3 space-y-4 flex-1 overflow-y-auto no-scrollbar pb-6">
+            <div className="p-3 space-y-4 flex-1 overflow-y-auto pb-6">
               {tasks.filter(t => t.status === col.id).map((task) => (
                 <div
                   key={task.id}
