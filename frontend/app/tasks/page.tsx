@@ -238,27 +238,29 @@ export default function TasksPage() {
       {loading && tasks.length === 0 ? (
          <div className="flex-1 flex items-center justify-center text-muted-foreground font-medium italic animate-pulse">Loading tickets...</div>
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden pb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 h-full max-h-[calc(100vh-180px)] overflow-hidden pb-4">
         {columns.map((col) => (
           <div 
             key={col.id} 
-            className="flex flex-col bg-muted/40 rounded-2xl border border-border/40 h-full backdrop-blur-xs transition-colors hover:bg-muted/50"
+            className="flex flex-col bg-muted/40 rounded-2xl border border-border/40 h-full backdrop-blur-xs transition-colors hover:bg-muted/50 overflow-hidden"
             onDragOver={allowDrop}
             onDrop={(e) => handleDrop(e, col.id)}
           >
-            <div className="flex items-center justify-between p-4 border-b border-border/30 bg-muted/20 rounded-t-2xl">
+            {/* Sticky Header Container */}
+            <div className="sticky top-0 z-20 flex items-center justify-between p-4 border-b border-border/30 bg-muted/40 backdrop-blur-md rounded-t-2xl shadow-sm">
               <div className="flex items-center gap-2.5">
                 <div className={`p-1.5 rounded-lg bg-card border border-border/40 shadow-xs ${col.color.replace('text-', 'bg-').replace('-500', '-500/10')}`}>
                   <col.icon className={`h-4 w-4 ${col.color}`} />
                 </div>
-                <h2 className="font-bold text-foreground text-sm tracking-tight capitalize">{col.label}</h2>
-                <span className="text-[10px] text-muted-foreground bg-muted/80 border border-border/40 px-2 py-0.5 rounded-full font-bold">
+                <h2 className="font-extrabold text-foreground text-sm tracking-tight capitalize">{col.label}</h2>
+                <span className="text-[10px] text-muted-foreground bg-muted/80 border border-border/40 px-2 py-0.5 rounded-full font-black">
                    {tasks.filter(t => t.status === col.id).length}
                 </span>
               </div>
             </div>
-
-            <div className="p-3 space-y-4 flex-1 overflow-y-auto pb-6">
+ 
+            {/* Scrollable Task Area */}
+            <div className="p-3 space-y-4 flex-1 overflow-y-auto pb-8 custom-scrollbar">
               {tasks.filter(t => t.status === col.id).map((task) => (
                 <div
                   key={task.id}
@@ -275,7 +277,7 @@ export default function TasksPage() {
                       </h3>
                       
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-widest shadow-xs ${
+                        <span className={`text-[10px] px-2 py-1 rounded-md font-extrabold uppercase tracking-widest shadow-xs ${
                           task.priority === 'HIGH' ? 'bg-red-500/15 text-red-600' :
                           task.priority === 'MEDIUM' ? 'bg-amber-500/15 text-amber-600' : 'bg-green-500/15 text-green-600'
                         }`}>
