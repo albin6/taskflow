@@ -1,113 +1,134 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { ApprovalsService } from './approvals.service';
-import { Repository, SelectQueryBuilder } from 'typeorm';
 import { ApprovalRequest } from './entities/approval-request.entity';
 import { User } from '../users/entities/user.entity';
-import { ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Role } from '../roles/entities/role.entity';
+import { Permissions } from '../common/constants/permissions';
 import { ApprovalStatus, UserStatus } from '../common/enums';
 
-describe('ApprovalsService', () => {
+describe('ApprovalsService (Hierarchy & Escalation)', () => {
   let service: ApprovalsService;
-  let mockApprovalRepo: Partial<Record<keyof Repository<ApprovalRequest>, jest.Mock>>;
-  let mockUserRepo: Partial<Record<keyof Repository<User>, jest.Mock>>;
-  let mockQueryBuilder: any;
+  let approvalRepo: Record<string, jest.Mock>;
+  let userRepo: Record<string, jest.Mock>;
+  let roleRepo: Record<string, jest.Mock>;
 
-  beforeEach(() => {
-    mockQueryBuilder = {
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      leftJoin: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      getMany: jest.fn(),
-      getRawOne: jest.fn(),
-    };
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ApprovalsService,
+        {
+          provide: getRepositoryToken(ApprovalRequest),
+          useValue: {
+            create: jest.fn().mockImplementation(dto => dto),
+            save: jest.fn().mockImplementation(req => Promise.resolve({ ...req, id: 'req-id' })),
+            find: jest.fn(),
+            findOne: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            count: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn().mockImplementation(dto => dto),
+          },
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: {
+            find: jest.fn(),
+            create: jest.fn().mockImplementation(dto => dto),
+          },
+        },
+      ],
+    }).compile();
 
-    mockApprovalRepo = {
-      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-      findOne: jest.fn(),
-      save: jest.fn(),
-    };
-
-    mockUserRepo = {
-      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-      findOne: jest.fn(),
-      save: jest.fn(),
-    };
-
-    service = new ApprovalsService(
-      mockApprovalRepo as any,
-      mockUserRepo as any,
-    );
+    service = module.get<ApprovalsService>(ApprovalsService);
+    approvalRepo = module.get(getRepositoryToken(ApprovalRequest));
+    userRepo = module.get(getRepositoryToken(User));
+    roleRepo = module.get(getRepositoryToken(Role));
   });
 
-  describe('findAll', () => {
-    it('should return all pending requests for Global Admin (level 0)', async () => {
-      const actor = { level: 0 };
-      const requests = [{ id: 'req1' }, { id: 'req2' }];
-      mockQueryBuilder.getMany.mockResolvedValue(requests);
+  describe('findNearestApproverRole', () => {
+    it('should find the nearest role with approval permission and active users', async () => {
+      const teamId = 'team-1';
+      
+      roleRepo.find.mockImplementation((params) => {
+        const where = params.where as any;
+        if (where?.level === 2) return Promise.resolve([{ id: 'role-2', level: 2, permissions: [], name: 'Lead' }]);
+        if (where?.level === 1) return Promise.resolve([{ id: 'role-1', level: 1, permissions: [Permissions.APPROVE_REGISTRATIONS], name: 'Head' }]);
+        return Promise.resolve([]);
+      });
 
-      const result = await service.findAll(actor);
+      userRepo.count.mockImplementation((params) => {
+        const where = params.where as any;
+        if (where?.role?.id === 'role-1') return Promise.resolve(1);
+        return Promise.resolve(0);
+      });
 
-      expect(result).toEqual(requests);
+      const result = await service.findNearestApproverRole(teamId, 2);
+      expect(result!.id).toBe('role-1');
+      expect(result!.name).toBe('Head');
     });
 
-    it('should filter requests by team scope for non-admin actors', async () => {
-      const actor = { level: 1, teamId: 'team-A' };
-      const requests = [
-        { id: '1', requestedRole: { level: 3 }, requester: { team: { id: 'team-A' } } }
-      ];
-      mockQueryBuilder.getMany.mockResolvedValue(requests);
-      mockQueryBuilder.getRawOne.mockResolvedValue({ max: 1 }); // max level available is 1 (actor tier)
-
-      const result = await service.findAll(actor);
-
-      expect(result).toHaveLength(1);
-    });
-  });
-
-  describe('verifyApproverEligibility', () => {
-    it('should throw ForbiddenException if actor is from a different team', async () => {
-       const request = { requester: { team: { id: 'team-A' } } } as any;
-       const actor = { level: 1, teamId: 'team-B' };
-
-       await expect(service.approve('id', actor)).rejects.toThrow(NotFoundException); // hits findOne first, mocked to fail if not found
+    it('should return null if no role has permissions or active users', async () => {
+      roleRepo.find.mockResolvedValue([]);
+      const result = await service.findNearestApproverRole('team-1', 2);
+      expect(result).toBeNull();
     });
   });
 
-  describe('approve', () => {
-    it('should successfully approve if actor is eligible', async () => {
-      const request = {
-        id: 'req1',
-        status: ApprovalStatus.PENDING,
-        requester: { id: 'user1', team: { id: 'team-A' } },
-        requestedRole: { level: 3 }
-      };
-      const actor = { userId: 'actor1', level: 1, teamId: 'team-A' };
+  describe('createApprovalRequest', () => {
+    it('should assign correct initial role and level', async () => {
+      const user = { id: 'u1', team: { id: 't1' } } as unknown as User;
+      const requestedRole = { id: 'r1', level: 3 } as unknown as Role;
 
-      mockApprovalRepo.findOne.mockResolvedValue(request);
-      mockUserRepo.findOne.mockResolvedValue({ id: 'actor1' }); // approver
-      mockQueryBuilder.getRawOne.mockResolvedValue({ max: 1 }); // max available is level 1
+      jest.spyOn(service, 'findNearestApproverRole').mockResolvedValue({ 
+        id: 'r2', level: 1, name: 'Head' 
+      } as unknown as Role);
 
-      const result = await service.approve('req1', actor);
-
-      expect(result.message).toContain('Request approved');
-      expect(request.status).toBe(ApprovalStatus.APPROVED);
+      const result = await service.createApprovalRequest(user, requestedRole);
+      expect(result.currentApproverLevel).toBe(1);
+      expect(result.assignedApproverRoleName).toBe('Head');
     });
 
-    it('should throw ForbiddenException if actor is not the highest available tier (Roll-Up fail)', async () => {
-      const request = {
-        id: 'req1',
-        status: ApprovalStatus.PENDING,
-        requester: { id: 'user1', team: { id: 'team-A' } },
-        requestedRole: { level: 3 }
-      };
-      const actor = { userId: 'actor1', level: 2, teamId: 'team-A' }; // Lead
+    it('should fallback to System Admin if no team approver found', async () => {
+      const user = { id: 'u1', team: { id: 't1' } } as unknown as User;
+      const requestedRole = { id: 'r1', level: 2 } as unknown as Role;
 
-      mockApprovalRepo.findOne.mockResolvedValue(request);
-      mockQueryBuilder.getRawOne.mockResolvedValue({ max: 1 }); // max available is Head (1)
+      jest.spyOn(service, 'findNearestApproverRole').mockResolvedValue(null);
 
-      await expect(service.approve('req1', actor)).rejects.toThrow(ForbiddenException);
+      const result = await service.createApprovalRequest(user, requestedRole);
+      expect(result.currentApproverLevel).toBe(0);
+      expect(result.assignedApproverRoleName).toBe('System Admin');
+    });
+  });
+
+  describe('escalatePendingRequests', () => {
+    it('should move request up the hierarchy if 24h passed', async () => {
+      const oldDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const req = { 
+        id: 'req1', 
+        status: ApprovalStatus.PENDING, 
+        currentApproverLevel: 2, 
+        createdAt: oldDate,
+        requester: { team: { id: 't1' } }
+      } as unknown as ApprovalRequest;
+
+      approvalRepo.find.mockResolvedValue([req]);
+      jest.spyOn(service, 'findNearestApproverRole').mockResolvedValue({ 
+        id: 'r-head', level: 1, name: 'Head' 
+      } as unknown as Role);
+
+      await service.escalatePendingRequests();
+
+      expect(approvalRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        currentApproverLevel: 1,
+        assignedApproverRoleName: 'Head'
+      }));
     });
   });
 });

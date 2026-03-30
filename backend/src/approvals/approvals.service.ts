@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, LessThan, IsNull } from 'typeorm';
 import { ApprovalRequest } from './entities/approval-request.entity';
 import { User } from '../users/entities/user.entity';
 import { ApprovalStatus, UserStatus } from '../common/enums';
+import { Role } from '../roles/entities/role.entity';
+import { Permissions } from '../common/constants/permissions';
 
 @Injectable()
 export class ApprovalsService {
@@ -12,7 +14,78 @@ export class ApprovalsService {
     private readonly approvalRepository: Repository<ApprovalRequest>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
   ) {}
+
+  async createApprovalRequest(user: User, requestedRole: Role): Promise<ApprovalRequest> {
+    const approverRole = await this.findNearestApproverRole(user.team?.id, requestedRole.level - 1);
+    
+    const request = this.approvalRepository.create({
+      requester: user,
+      requestedRole: requestedRole,
+      status: ApprovalStatus.PENDING,
+      currentApproverLevel: approverRole ? approverRole.level : 0, // Fallback to Admin (0)
+      assignedApproverRoleName: approverRole ? approverRole.name : 'System Admin',
+    });
+
+    return this.approvalRepository.save(request);
+  }
+
+  /**
+   * Traverses up the hierarchy to find the nearest role with APPROVE_REGISTRATIONS permission
+   * and at least one active user in the team.
+   */
+  async findNearestApproverRole(teamId: string, startLevel: number): Promise<Role | null> {
+    for (let level = startLevel; level > 0; level--) {
+      const roles = await this.roleRepository.find({
+        where: { team: { id: teamId }, level },
+      });
+
+      for (const role of roles) {
+        if (role.permissions.includes(Permissions.APPROVE_REGISTRATIONS)) {
+          // Check if at least one active user exists in this role
+          const userCount = await this.userRepository.count({
+            where: { team: { id: teamId }, role: { id: role.id }, status: UserStatus.ACTIVE },
+          });
+
+          if (userCount > 0) {
+            return role;
+          }
+        }
+      }
+    }
+    return null; // Fallback to Global Admin
+  }
+
+  async escalatePendingRequests() {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // Find requests that haven't been escalated in 24h OR were created 24h ago and never escalated
+    const requests = await this.approvalRepository.find({
+      where: [
+        { status: ApprovalStatus.PENDING, lastEscalationAt: LessThan(twentyFourHoursAgo) },
+        { status: ApprovalStatus.PENDING, lastEscalationAt: IsNull(), createdAt: LessThan(twentyFourHoursAgo) },
+      ],
+      relations: ['requester', 'requester.team'],
+    });
+
+    for (const request of requests) {
+      if (request.currentApproverLevel <= 0) continue; // Already at Admin level
+
+      const nextApproverRole = await this.findNearestApproverRole(
+        request.requester.team?.id,
+        request.currentApproverLevel - 1,
+      );
+
+      request.currentApproverLevel = nextApproverRole ? nextApproverRole.level : 0;
+      request.assignedApproverRoleName = nextApproverRole ? nextApproverRole.name : 'System Admin';
+      request.lastEscalationAt = new Date();
+      
+      await this.approvalRepository.save(request);
+      console.log(`Escalated Request ${request.id} to Level ${request.currentApproverLevel} (${request.assignedApproverRoleName})`);
+    }
+  }
 
   async findAll(actor: any): Promise<ApprovalRequest[]> {
     const query = this.approvalRepository
@@ -22,42 +95,18 @@ export class ApprovalsService {
       .leftJoinAndSelect('requester.team', 'team')
       .where('request.status = :status', { status: ApprovalStatus.PENDING });
 
-    if (actor.level !== 0 && actor.teamId) {
-       query.andWhere('team.id = :teamId', { teamId: actor.teamId });
-    }
-
-    const requests = await query.getMany();
-
-    if (actor.level === 0) {
-      return requests; // Global Admin sees all pending actions
-    }
-
-    const eligibleRequests: ApprovalRequest[] = [];
-
-    // Roll-Up Loop: Validate if Actor is the highest available tier below the requested Level
-    for (const req of requests) {
-      const requestedLevel = req.requestedRole?.level ?? 99;
-
-      // Find the Maximum Level (lowest tier index) of users in this team who are ACTIVE and strictly higher up than requestedLevel
-      // E.g., if requested is level 3, and there is a Lead (2), MAX(level) is 2.
-      const maxAvailableLevelResult = await this.userRepository
-        .createQueryBuilder('u')
-        .leftJoin('u.role', 'r')
-        .where('u.teamId = :teamId', { teamId: actor.teamId })
-        .andWhere('u.status = :status', { status: UserStatus.ACTIVE })
-        .andWhere('r.level < :requestedLevel', { requestedLevel })
-        .select('MAX(r.level)', 'max')
-        .getRawOne();
-
-      const maxLevel = maxAvailableLevelResult?.max;
-
-      // Actor is the approver if their level matches the highest available tier gap
-      if (maxLevel !== undefined && actor.level === maxLevel) {
-        eligibleRequests.push(req);
+    // 1. Admin (Level 0) sees all pending requests
+    // 2. Others see requests where their level matches the currentApproverLevel AND they belong to the same team
+    if (actor.level !== 0) {
+      query.andWhere('request.currentApproverLevel = :level', { level: actor.level });
+      if (actor.teamId) {
+        query.andWhere('team.id = :teamId', { teamId: actor.teamId });
+      } else {
+        return []; // Non-admin without a team cannot see team-specific requests
       }
     }
 
-    return eligibleRequests;
+    return query.getMany();
   }
 
   async findOne(id: string): Promise<ApprovalRequest> {
@@ -131,21 +180,13 @@ export class ApprovalsService {
       throw new ForbiddenException('You cannot approve requests from another team.');
     }
 
-    const requestedLevel = request.requestedRole?.level ?? 99;
+    // Simplified eligibility: Must match the currently assigned level and have permissions
+    if (actor.level !== request.currentApproverLevel) {
+      throw new ForbiddenException('You are not the currently designated approver for this request.');
+    }
 
-    const maxAvailableLevelResult = await this.userRepository
-      .createQueryBuilder('u')
-      .leftJoin('u.role', 'r')
-      .where('u.teamId = :teamId', { teamId })
-      .andWhere('u.status = :status', { status: UserStatus.ACTIVE })
-      .andWhere('r.level < :requestedLevel', { requestedLevel })
-      .select('MAX(r.level)', 'max')
-      .getRawOne();
-
-    const maxLevel = maxAvailableLevelResult?.max;
-
-    if (maxLevel === undefined || actor.level !== maxLevel) {
-      throw new ForbiddenException('You are not the eligible approver for this request due to hierarchy roll-up rules.');
+    if (!actor.permissions?.includes(Permissions.APPROVE_REGISTRATIONS)) {
+      throw new ForbiddenException('You do not have permission to approve registrations.');
     }
   }
 }

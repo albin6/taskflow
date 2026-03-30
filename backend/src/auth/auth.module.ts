@@ -11,10 +11,12 @@ import { Role } from '../roles/entities/role.entity';
 import { Team } from '../teams/entities/team.entity';
 import { ApprovalRequest } from '../approvals/entities/approval-request.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { ApprovalsModule } from '../approvals/approvals.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Role, Team, ApprovalRequest]),
+    ApprovalsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

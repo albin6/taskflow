@@ -11,6 +11,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserStatus, ApprovalStatus } from '../common/enums';
 import { ApprovalRequest } from '../approvals/entities/approval-request.entity';
+import { ApprovalsService } from '../approvals/approvals.service';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +25,7 @@ export class AuthService {
     @InjectRepository(ApprovalRequest)
     private readonly approvalRepository: Repository<ApprovalRequest>,
     private readonly jwtService: JwtService,
+    private readonly approvalsService: ApprovalsService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<{ message: string }> {
@@ -70,15 +72,11 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    const approvalRequest = this.approvalRepository.create({
-      requester: user,
-      requestedRole: role,
-      status: ApprovalStatus.PENDING,
-    });
+    const approval = await this.approvalsService.createApprovalRequest(user, role);
     
-    await this.approvalRepository.save(approvalRequest);
-    
-    return { message: 'Registration request submitted. Awaiting approval from your team leader.' };
+    return { 
+      message: `Registration request submitted. Awaiting approval from ${approval.assignedApproverRoleName}.` 
+    };
   }
 
   async login(loginDto: LoginDto): Promise<{ accessToken: string }> {

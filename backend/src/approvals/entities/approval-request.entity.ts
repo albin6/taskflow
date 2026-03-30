@@ -17,6 +17,15 @@ export class ApprovalRequest {
   @Column({ type: 'varchar', length: 20, default: ApprovalStatus.PENDING })
   status: ApprovalStatus;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  assignedApproverRoleName: string;
+
+  @Column({ type: 'int', nullable: true })
+  currentApproverLevel: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastEscalationAt: Date;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   approvedBy: User; // User who approved/rejected the request
 
