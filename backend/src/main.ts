@@ -3,6 +3,9 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { setDefaultResultOrder } from 'node:dns';
 import compression from 'compression';
+import helmet from 'helmet';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { SanitizationPipe } from './common/pipes/sanitization.pipe';
 
 // Force DNS resolution to prioritize IPv4 over IPv6. 
 // This is critical for connecting to external services (like Gmail SMTP) 
@@ -14,6 +17,12 @@ async function bootstrap() {
   
   // Enable compression for large responses
   app.use(compression());
+
+  // Security headers
+  app.use(helmet());
+  
+  // Custom Global Exception Filter
+  app.useGlobalFilters(new AllExceptionsFilter());
   
   // Enable CORS for frontend requests
   app.enableCors({
@@ -27,6 +36,9 @@ async function bootstrap() {
     transform: true,
     forbidNonWhitelisted: true,
   }));
+
+  // Sanitization Pipe for XSS and Trimming
+  app.useGlobalPipes(new SanitizationPipe());
 
   const port = process.env.PORT || 4000; // Using 4000 to avoid clash with Next.js dashboard
   await app.listen(port);

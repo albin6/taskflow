@@ -27,9 +27,17 @@ if (typeof window !== 'undefined') {
       if (error.response?.status === 401) {
         localStorage.removeItem('taskflow_token');
         localStorage.removeItem('taskflow_user');
-        // Optional: window.location.href = '/login';
       }
-      return Promise.reject(error);
+
+      // Standardize the error response for easier UI usage
+      const genericError = {
+        message: error.response?.data?.message || error.message || 'An unexpected error occurred',
+        code: error.response?.data?.code || 'NETWORK_ERROR',
+        status: error.response?.status || 500,
+        original: error,
+      };
+
+      return Promise.reject(genericError);
     }
   );
 }
