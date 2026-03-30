@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '../../../lib/axios';
 import { Plus, Shield, Trash2, Pencil, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../../store/useAuthStore';
+import ConfirmationModal from '../../../components/ui/confirmation-modal';
 
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
@@ -22,6 +23,10 @@ export default function TeamRolesPage() {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
+
+  // Confirmation Modal State
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
   const { user } = useAuthStore();
 
@@ -100,10 +105,17 @@ export default function TeamRolesPage() {
     }
   };
 
-  const handleDeleteRole = async (roleId: string) => {
-    if (!confirm('Are you sure you want to delete this role?')) return;
+  const confirmDeleteRole = (roleId: string) => {
+    setRoleToDelete(roleId);
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleDeleteRole = async () => {
+    if (!roleToDelete) return;
     try {
-      await api.delete(`/roles/${roleId}`);
+      await api.delete(`/roles/${roleToDelete}`);
+      setIsConfirmModalOpen(false);
+      setRoleToDelete(null);
       fetchRoles();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to delete role.');
@@ -171,7 +183,7 @@ export default function TeamRolesPage() {
                       </button>
                       {role.level > (user?.level || 0) && role.level > 2 && ( // Can only delete custom roles strictly below own level
                         <button 
-                          onClick={() => handleDeleteRole(role.id)}
+                          onClick={() => confirmDeleteRole(role.id)}
                           className="text-red-500 hover:text-red-600 p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
                           title="Delete Role"
                         >
@@ -260,6 +272,17 @@ export default function TeamRolesPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal 
+        isOpen={isConfirmModalOpen}
+        title="Delete Role"
+        message="Are you sure you want to delete this role? This will remove all associated permissions and cannot be undone."
+        onConfirm={handleDeleteRole}
+        onCancel={() => setIsConfirmModalOpen(false)}
+        variant="danger"
+        confirmText="Delete Role"
+      />
     </div>
   );
 }

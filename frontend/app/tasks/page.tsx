@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '../../lib/axios';
 import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import ConfirmationModal from '../../components/ui/confirmation-modal';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -11,6 +12,10 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  // Confirmation Modal State
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+
   const { user } = useAuthStore();
   const canCreate = user?.level === 0 || user?.permissions?.includes('CREATE_TASK');
   
@@ -128,10 +133,17 @@ export default function TasksPage() {
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+  const confirmDeleteTask = (taskId: string) => {
+    setTaskToDelete(taskId);
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
     try {
-      await api.delete(`/tasks/${taskId}`);
+      await api.delete(`/tasks/${taskToDelete}`);
+      setIsConfirmModalOpen(false);
+      setTaskToDelete(null);
       fetchTasks();
     } catch (err) {
       console.error('Failed to delete task', err);
@@ -246,11 +258,11 @@ export default function TasksPage() {
                      {canManageTask(task) && (
                         <>
                            <button onClick={() => openModal(task)} className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded"><Edit3 className="h-3 w-3" /></button>
-                           <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded"><Trash2 className="h-3 w-3" /></button>
-                        </>
-                     )}
-                  </div>
-                  <div className="flex items-start justify-between gap-2">
+                            <button onClick={() => confirmDeleteTask(task.id)} className="p-1 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded"><Trash2 className="h-3 w-3" /></button>
+                         </>
+                      )}
+                   </div>
+                   <div className="flex items-start justify-between gap-2">
                      <h3 className="font-medium text-foreground text-sm leading-snug">{task.title}</h3>
                      <span className={`text-xxs px-1.5 py-0.5 rounded font-bold uppercase shrink-0 ${
                         task.priority === 'HIGH' ? 'bg-red-500/10 text-red-600' :
@@ -355,6 +367,17 @@ export default function TasksPage() {
             </div>
          </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal 
+        isOpen={isConfirmModalOpen}
+        title="Delete Task"
+        message="Are you sure you want to delete this task? This action cannot be undone."
+        onConfirm={handleDeleteTask}
+        onCancel={() => setIsConfirmModalOpen(false)}
+        variant="danger"
+        confirmText="Delete Task"
+      />
     </div>
   );
 }
