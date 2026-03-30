@@ -165,7 +165,7 @@ export default function RegisterPage() {
             >
               <option value="" disabled>Select Role...</option>
               {roles.map((r) => (
-                <option key={r.id} value={r.id}>{r.name} (Lvl {r.level})</option>
+                <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
           </div>
