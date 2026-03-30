@@ -15,6 +15,12 @@ export class MailService {
         user: this.configService.get<string>('MAIL_USER'),
         pass: this.configService.get<string>('MAIL_PASS'),
       },
+      tls: {
+        rejectUnauthorized: false, // Help with some cloud-specific certificate issues
+      },
+      connectionTimeout: 15000, // Increased to 15s for production containers
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
     });
   }
 
