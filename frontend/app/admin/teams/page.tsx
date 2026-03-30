@@ -35,9 +35,13 @@ export default function AdminTeamsPage() {
       setNewTeamName('');
       fetchTeams(); // Reload
     } catch (err: any) {
+      if (err.response?.status === 409) {
+        setError(`A team with the name "${newTeamName}" already exists.`);
+      } else {
+        const msg = err.response?.data?.message;
+        setError(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to create team.');
+      }
       console.error('Create Team Error Details:', err.response?.data || err);
-      const msg = err.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to create team.');
     } finally {
       setLoading(false);
     }

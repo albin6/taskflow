@@ -166,6 +166,7 @@ export default function TeamMembersPage() {
                 <label className="block text-xs font-medium mb-1">Email</label>
                 <input 
                   type="email" required value={email} onChange={(e) => setEmail(e.target.value)} 
+                  autoComplete="email"
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
                   placeholder="john@example.com"
                 />
@@ -177,6 +178,7 @@ export default function TeamMembersPage() {
                   <input 
                     type={showPassword ? 'text' : 'password'} 
                     required value={password} onChange={(e) => setPassword(e.target.value)} 
+                    autoComplete="new-password"
                     className="w-full px-3 py-2 pr-10 rounded-lg border border-border bg-background text-sm"
                     placeholder="••••••••"
                   />

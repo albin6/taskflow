@@ -116,7 +116,11 @@ export default function AdminRolesPage() {
       setIsModalOpen(false);
       fetchRoles(selectedTeamId); // Reload
     } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+      if (err.response?.status === 409) {
+        setError(`A role with the name "${roleName}" already exists for this team.`);
+      } else {
+        setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+      }
     } finally {
       setSubmitting(false);
     }

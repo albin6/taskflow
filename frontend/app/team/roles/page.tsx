@@ -99,7 +99,11 @@ export default function TeamRolesPage() {
       setIsModalOpen(false);
       fetchRoles();
     } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+      if (err.response?.status === 409) {
+        setError(`A role with the name "${roleName}" already exists for your team.`);
+      } else {
+        setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+      }
     } finally {
       setSubmitting(false);
     }

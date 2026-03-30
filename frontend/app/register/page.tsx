@@ -113,11 +113,12 @@ export default function RegisterPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
               placeholder="you@example.com"
             />
           </div>
-
+ 
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Password</label>
             <div className="relative">
@@ -126,6 +127,7 @@ export default function RegisterPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 className="w-full px-3.5 py-2 pr-10 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
                 placeholder="Min 6 characters"
               />
