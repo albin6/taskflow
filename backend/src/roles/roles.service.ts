@@ -16,17 +16,21 @@ export class RolesService {
   ) {}
 
   async create(createRoleDto: CreateRoleDto): Promise<Role> {
-    const { name, permissions, teamId } = createRoleDto;
+    const { permissions, teamId } = createRoleDto;
+    const name = createRoleDto.name.trim();
 
     const team = await this.teamRepository.findOne({ where: { id: teamId } });
     if (!team) {
       throw new NotFoundException(`Team with ID "${teamId}" not found.`);
     }
 
-    // 1. Check for name duplicates in THIS team only
-    const existing = await this.roleRepository.findOne({ 
-      where: { name, team: { id: teamId } } 
-    });
+    // 1. Check for name duplicates in THIS team only (Case-Insensitive)
+    const existing = await this.roleRepository
+      .createQueryBuilder('role')
+      .where('LOWER(role.name) = LOWER(:name)', { name })
+      .andWhere('role.teamId = :teamId', { teamId })
+      .getOne();
+
     if (existing) {
       throw new ConflictException(`Role with name "${name}" already exists in this team.`);
     }
@@ -70,10 +74,25 @@ export class RolesService {
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<Role> {
     const role = await this.findOne(id);
 
-    // Prevent altering fixed structural names/systems if Level 0-2?
-    // User Head/Lead technically manage their roles so updating name or permissions IS allowed, 
-    // but level stays static.
-    if (updateRoleDto.name) role.name = updateRoleDto.name;
+    // Normalize and Validations for Rename
+    if (updateRoleDto.name) {
+       const trimmedName = updateRoleDto.name.trim();
+       
+       // Check for absolute duplication
+       const existing = await this.roleRepository
+          .createQueryBuilder('role')
+          .where('LOWER(role.name) = LOWER(:name)', { name: trimmedName })
+          .andWhere('role.teamId = :teamId', { teamId: role.team?.id || null }) // Support global roles? (They have team=null)
+          .andWhere('role.id != :id', { id })
+          .getOne();
+
+       if (existing) {
+          throw new ConflictException(`Role with name "${trimmedName}" already exists in this team.`);
+       }
+
+       role.name = trimmedName;
+    }
+
     if (updateRoleDto.permissions) role.permissions = updateRoleDto.permissions;
 
     return this.roleRepository.save(role);
