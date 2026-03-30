@@ -16,12 +16,13 @@ export class MailService {
         pass: this.configService.get<string>('MAIL_PASS'),
       },
       tls: {
-        rejectUnauthorized: false, // Help with some cloud-specific certificate issues
+        rejectUnauthorized: false,
       },
-      connectionTimeout: 15000, // Increased to 15s for production containers
+      family: 4, // Force IPv4
+      connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 15000,
-    });
+    } as any);
   }
 
   async sendResetPasswordEmail(to: string, token: string) {
