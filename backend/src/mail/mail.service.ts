@@ -10,8 +10,8 @@ export class MailService {
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'albinaji.rnd@gmail.com',
-        pass: 'ghfc cdrp qgvo pwxn', // Gmail App Password
+        user: this.configService.get<string>('MAIL_USER'),
+        pass: this.configService.get<string>('MAIL_PASS'),
       },
     });
   }
@@ -21,7 +21,7 @@ export class MailService {
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
     const mailOptions = {
-      from: '"Taskflow Support" <albinaji.rnd@gmail.com>',
+      from: `"Taskflow Support" <${this.configService.get<string>('MAIL_USER')}>`,
       to,
       subject: 'Password Reset Request',
       html: `
