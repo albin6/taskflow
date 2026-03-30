@@ -5,12 +5,23 @@ import api from '../../lib/axios';
 import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import ConfirmationModal from '../../components/ui/confirmation-modal';
+import { ToastContainer } from '../../components/ui/toast';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+ 
+  // Toast State
+  const [toasts, setToasts] = useState<any[]>([]);
+  const addToast = (message: string, type: 'success' | 'error' | 'warning' | 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
   
   // Confirmation Modal State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -76,8 +87,17 @@ export default function TasksPage() {
 
     try {
       await api.patch(`/tasks/${taskId}`, { status: targetStatus });
+      addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
       fetchTasks();
-    } catch (err) {
+    } catch (err: any) {
+      const status = err.response?.status;
+      if (status === 409) {
+        addToast('Impossible Move: Task status cannot be moved backwards manually.', 'error');
+      } else if (status === 403) {
+        addToast('Access Denied: Only the creator or assignee can update status.', 'error');
+      } else {
+        addToast(err.response?.data?.message || 'Failed to update task status.', 'error');
+      }
       console.error('Failed to update task status', err);
     }
   };
@@ -120,14 +140,16 @@ export default function TasksPage() {
 
       if (selectedTask) {
         await api.patch(`/tasks/${selectedTask.id}`, payload);
+        addToast('Task updated successfully', 'success');
       } else {
         await api.post('/tasks', { ...payload, status: 'TODO' });
+        addToast('New task created!', 'success');
       }
 
       setIsModalOpen(false);
       fetchTasks();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save task.');
+      addToast(err.response?.data?.message || 'Failed to save task.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -142,10 +164,12 @@ export default function TasksPage() {
     if (!taskToDelete) return;
     try {
       await api.delete(`/tasks/${taskToDelete}`);
+      addToast('Task deleted successfully', 'success');
       setIsConfirmModalOpen(false);
       setTaskToDelete(null);
       fetchTasks();
-    } catch (err) {
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to delete task.', 'error');
       console.error('Failed to delete task', err);
     }
   };
@@ -219,6 +243,7 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6 h-full flex flex-col">
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="flex items-center justify-between">
         <div className="animate-in fade-in slide-in-from-left-4 duration-500">
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">Task Board</h1>
