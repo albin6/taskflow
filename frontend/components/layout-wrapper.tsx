@@ -12,7 +12,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   
-  const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/';
+  const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/' || pathname === '/forgot-password' || pathname === '/reset-password';
 
   useEffect(() => {
     setMounted(true);
