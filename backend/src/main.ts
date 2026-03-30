@@ -1,6 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { setDefaultResultOrder } from 'node:dns';
+
+// Force DNS resolution to prioritize IPv4 over IPv6. 
+// This is critical for connecting to external services (like Gmail SMTP) 
+// on cloud providers like Render that do not have IPv6 routing configured.
+setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

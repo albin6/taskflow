@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '../../../lib/axios';
-import { Plus, Shield, Trash2 } from 'lucide-react';
+import { Plus, Shield, Trash2, Pencil } from 'lucide-react';
 
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
@@ -22,8 +22,9 @@ export default function AdminRolesPage() {
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
 
-  // New Role Form State
+  // Form State
   const [roleName, setRoleName] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -71,7 +72,23 @@ export default function AdminRolesPage() {
     );
   };
 
-  const handleCreateRole = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+    setEditingRole(null);
+    setRoleName('');
+    setSelectedPermissions([]);
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (role: any) => {
+    setEditingRole(role);
+    setRoleName(role.name);
+    setSelectedPermissions(role.permissions);
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmitRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roleName.trim() || !selectedTeamId) return;
 
@@ -79,17 +96,22 @@ export default function AdminRolesPage() {
     setError('');
 
     try {
-      await api.post('/roles', {
-        name: roleName,
-        permissions: selectedPermissions,
-        teamId: selectedTeamId
-      });
-      setRoleName('');
-      setSelectedPermissions([]);
+      if (editingRole) {
+        await api.patch(`/roles/${editingRole.id}`, {
+          name: roleName,
+          permissions: selectedPermissions,
+        });
+      } else {
+        await api.post('/roles', {
+          name: roleName,
+          permissions: selectedPermissions,
+          teamId: selectedTeamId
+        });
+      }
       setIsModalOpen(false);
       fetchRoles(selectedTeamId); // Reload
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create role.');
+      setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
     } finally {
       setSubmitting(false);
     }
@@ -124,7 +146,7 @@ export default function AdminRolesPage() {
             ))}
           </select>
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             disabled={!selectedTeamId}
             className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm flex items-center gap-1.5 shadow-sm disabled:opacity-50"
           >
@@ -170,14 +192,24 @@ export default function AdminRolesPage() {
                      </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    {role.level > 2 && ( // Anchor roles Admin(0), Head(1), Lead(2) cannot be deleted
+                    <div className="flex items-center justify-end gap-1">
                       <button 
-                        onClick={() => handleDeleteRole(role.id)}
-                        className="text-red-500 hover:text-red-600 p-1 rounded-md hover:bg-red-500/10 transition-colors"
+                        onClick={() => openEditModal(role)}
+                        className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-primary/10 transition-colors"
+                        title="Edit Role"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </button>
-                    )}
+                      {role.level > 2 && ( // Anchor roles Admin(0), Head(1), Lead(2) cannot be deleted
+                        <button 
+                          onClick={() => handleDeleteRole(role.id)}
+                          className="text-red-500 hover:text-red-600 p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
+                          title="Delete Role"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -193,14 +225,16 @@ export default function AdminRolesPage() {
         </div>
       )}
 
-      {/* Create Role Modal */}
+      {/* Role Modal (Combined Create/Edit) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-card w-full max-w-lg p-6 rounded-2xl border border-border shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-foreground">Create New Role</h2>
+            <h2 className="text-lg font-bold text-foreground">
+              {editingRole ? 'Edit Role' : 'Create New Role'}
+            </h2>
             {error && <div className="p-2 text-xs text-red-500 bg-red-500/10 rounded-md">{error}</div>}
             
-            <form onSubmit={handleCreateRole} className="space-y-4">
+            <form onSubmit={handleSubmitRole} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Role Name</label>
                 <input 
@@ -243,7 +277,7 @@ export default function AdminRolesPage() {
                   disabled={submitting}
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm disabled:opacity-50"
                 >
-                  {submitting ? 'Creating...' : 'Create Role'}
+                  {submitting ? (editingRole ? 'Updating...' : 'Creating...') : (editingRole ? 'Update Role' : 'Create Role')}
                 </button>
               </div>
             </form>

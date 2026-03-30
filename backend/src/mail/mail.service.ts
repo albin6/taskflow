@@ -8,7 +8,7 @@ export class MailService {
 
   constructor(private configService: ConfigService) {
     this.transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
+      host: 'smtp.googlemail.com', // Alternative GMail host for better compatibility
       port: 587,
       secure: false, // Use STARTTLS
       auth: {
@@ -16,10 +16,11 @@ export class MailService {
         pass: this.configService.get<string>('MAIL_PASS'),
       },
       tls: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: false, // Bypasses self-signed cert issues internally on some cloud providers
+        minVersion: 'TLSv1.2',
       },
-      family: 4, // Force IPv4
-      connectionTimeout: 15000,
+      family: 4, // Explicitly force IPv4 even at the library level
+      connectionTimeout: 15000, 
       greetingTimeout: 15000,
       socketTimeout: 15000,
     } as any);
