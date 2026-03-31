@@ -24,6 +24,11 @@ if (typeof window !== 'undefined') {
   api.interceptors.response.use(
     (response) => response,
     (error) => {
+      let message = error.response?.data?.message || error.message || 'An unexpected error occurred';
+      if (Array.isArray(message)) {
+        message = message.join(', ');
+      }
+
       if (error.response?.status === 401) {
         localStorage.removeItem('taskflow_token');
         localStorage.removeItem('taskflow_user');
@@ -31,7 +36,7 @@ if (typeof window !== 'undefined') {
 
       // Standardize the error response for easier UI usage
       const genericError = {
-        message: error.response?.data?.message || error.message || 'An unexpected error occurred',
+        message,
         code: error.response?.data?.code || 'NETWORK_ERROR',
         status: error.response?.status || 500,
         original: error,

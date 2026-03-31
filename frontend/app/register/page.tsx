@@ -82,7 +82,7 @@ export default function RegisterPage() {
           router.push('/login');
       }, 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to submit registration. verify fields.');
+      setError(err.message || 'Failed to submit registration. verify fields.');
     } finally {
       setLoading(false);
     }

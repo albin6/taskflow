@@ -15,7 +15,7 @@ export default function TeamAuditLogPage() {
     setLoading(true);
     try {
       const res = await api.get('/audit-logs'); // Backend automatically scopes by actor bounds
-      setLogs(res.data);
+      setLogs(res.data.data);
     } catch (err) {
       console.error('Failed to fetch audit logs', err);
     } finally {

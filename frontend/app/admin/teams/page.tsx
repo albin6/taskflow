@@ -57,11 +57,10 @@ export default function AdminTeamsPage() {
       reset();
       fetchTeams();
     } catch (err: any) {
-      if (err.response?.status === 409) {
+      if (err.status === 409) {
         setServerError(`A team with the name "${data.name}" already exists.`);
       } else {
-        const msg = err.response?.data?.message;
-        setServerError(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to create team.');
+        setServerError(err.message || 'Failed to create team.');
       }
     } finally {
       setSubmitting(false);

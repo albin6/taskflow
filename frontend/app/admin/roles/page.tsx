@@ -139,10 +139,10 @@ export default function AdminRolesPage() {
       setIsModalOpen(false);
       fetchRoles(selectedTeamId);
     } catch (err: any) {
-      if (err.response?.status === 409) {
+      if (err.status === 409) {
         setServerError(`A role with the name "${data.name}" already exists for this team.`);
       } else {
-        setServerError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+        setServerError(err.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
       }
     } finally {
       setSubmitting(false);
@@ -162,7 +162,7 @@ export default function AdminRolesPage() {
       setRoleToDelete(null);
       fetchRoles(selectedTeamId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete role.');
+      alert(err.message || 'Failed to delete role.');
     }
   };
 

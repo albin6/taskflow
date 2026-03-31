@@ -102,7 +102,7 @@ export default function AdminUsersPage() {
       reset();
       fetchUsers();
     } catch (err: any) {
-      setServerError(err.response?.data?.message || 'Failed to create user.');
+      setServerError(err.message || 'Failed to create user.');
     } finally {
       setSubmitting(false);
     }

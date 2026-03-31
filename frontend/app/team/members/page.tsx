@@ -89,7 +89,7 @@ export default function TeamMembersPage() {
       reset();
       fetchMembers();
     } catch (err: any) {
-      setServerError(err.response?.data?.message || 'Failed to create member.');
+      setServerError(err.message || 'Failed to create member.');
     } finally {
       setSubmitting(false);
     }

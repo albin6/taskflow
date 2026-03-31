@@ -185,13 +185,13 @@ export default function TasksPage() {
       addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
     } catch (err: any) {
-      const status = err.response?.status;
+      const status = err.status;
       if (status === 409) {
         addToast('Impossible Move: Task status cannot be moved backwards manually.', 'error');
       } else if (status === 403) {
         addToast('Access Denied: Only the creator or assignee can update status.', 'error');
       } else {
-        addToast(err.response?.data?.message || 'Failed to update task status.', 'error');
+        addToast(err.message || 'Failed to update task status.', 'error');
       }
     }
   };
@@ -269,7 +269,7 @@ export default function TasksPage() {
       setIsModalOpen(false);
       fetchTasks(1, true);
     } catch (err: any) {
-      addToast(err.response?.data?.message || 'Failed to save task.', 'error');
+      addToast(err.message || 'Failed to save task.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -311,7 +311,7 @@ export default function TasksPage() {
       setTaskToDelete(null);
       fetchTasks(1, true);
     } catch (err: any) {
-      addToast(err.response?.data?.message || 'Failed to delete task.', 'error');
+      addToast(err.message || 'Failed to delete task.', 'error');
     }
   };
 

@@ -46,7 +46,7 @@ function ResetPasswordForm() {
       });
       setStatus('success');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to reset password. The link may have expired.');
+      setError(err.message || 'Failed to reset password. The link may have expired.');
       setStatus('error');
     } finally {
       setLoading(false);

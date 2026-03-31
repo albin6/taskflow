@@ -100,10 +100,10 @@ export default function TeamRolesPage() {
       setIsModalOpen(false);
       fetchRoles();
     } catch (err: any) {
-      if (err.response?.status === 409) {
+      if (err.status === 409) {
         setError(`A role with the name "${roleName}" already exists for your team.`);
       } else {
-        setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+        setError(err.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
       }
     } finally {
       setSubmitting(false);
@@ -123,7 +123,7 @@ export default function TeamRolesPage() {
       setRoleToDelete(null);
       fetchRoles();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete role.');
+      alert(err.message || 'Failed to delete role.');
     }
   };
 

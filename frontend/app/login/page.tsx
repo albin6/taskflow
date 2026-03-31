@@ -50,7 +50,7 @@ export default function LoginPage() {
       setAuth(profileResponse.data, accessToken);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials or pending approval.');
+      setError(err.message || 'Invalid credentials or pending approval.');
     } finally {
       setLoading(false);
     }
