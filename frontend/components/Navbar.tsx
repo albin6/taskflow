@@ -41,9 +41,9 @@ export default function Navbar() {
           <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white font-medium text-sm">
             {user.name.charAt(0).toUpperCase()}
           </div>
-          <span className="text-sm font-medium text-foreground hidden sm:block">
+          <span className="text-sm font-medium text-foreground hidden sm:block truncate max-w-[150px]">
             {user.name}
-          </span >
+          </span>
         </div>
       </div>
     </header>

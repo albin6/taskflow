@@ -111,9 +111,13 @@ export default function Sidebar() {
           <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-white font-medium">
             {user?.name?.charAt(0).toUpperCase() || '?'}
           </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground truncate">{user?.name || 'User'}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate" title={user?.name}>
+              {user?.name || 'User'}
+            </p>
+            <p className="text-xs text-muted-foreground truncate" title={user?.email}>
+              {user?.email}
+            </p>
           </div>
         </div>
         <button
