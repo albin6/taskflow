@@ -19,7 +19,7 @@ export class SeedService implements OnModuleInit {
     if (adminRole) {
       await this.seedAdminUser(adminRole);
     }
-    await this.patchTeamLeads();
+    await this.patchRolePermissions();
   }
 
   private async seedAdminRole(): Promise<Role> {
@@ -54,13 +54,41 @@ export class SeedService implements OnModuleInit {
     }
   }
 
-  private async patchTeamLeads() {
-    const roles = await this.roleRepository.find({ where: { name: 'Team Lead' } });
+  private async patchRolePermissions() {
+    const roles = await this.roleRepository.find();
+    
+    const taskPermissions = ['VIEW_TASKS', 'CREATE_TASK', 'EDIT_TASK', 'DELETE_TASK', 'ASSIGN_TASK'];
+
     for (const role of roles) {
-      if (!role.permissions.includes('MANAGE_USERS')) {
-         role.permissions.push('MANAGE_USERS');
-         await this.roleRepository.save(role);
-         console.log(`Patched Team Lead role with MANAGE_USERS for team setup.`);
+      if (role.level === 0) continue; // Skip System Admin
+
+      let changed = false;
+
+      // 1. Everyone (Level 1-5) should be able to VIEW_TASKS
+      if (!role.permissions.includes('VIEW_TASKS')) {
+        role.permissions.push('VIEW_TASKS');
+        changed = true;
+      }
+
+      // 2. Managers (Heads and Leads, Level 1 and 2) should have ALL task permissions
+      if (role.level >= 1 && role.level <= 2) {
+        for (const p of taskPermissions) {
+           if (!role.permissions.includes(p)) {
+             role.permissions.push(p);
+             changed = true;
+           }
+        }
+        
+        // Also ensure they can manage users
+        if (!role.permissions.includes('MANAGE_USERS')) {
+          role.permissions.push('MANAGE_USERS');
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await this.roleRepository.save(role);
+        console.log(`Patched permissions for role: ${role.name} (Level ${role.level})`);
       }
     }
   }

@@ -9,13 +9,13 @@ import { Plus, Shield, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
 import BadgeList from '../../../components/ui/badge-list';
 import InputError from '../../../components/ui/input-error';
-
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
   { id: 'REORDER_ROLES', label: 'Reorder Roles' },
   { id: 'MANAGE_USERS', label: 'Manage Users' },
   { id: 'APPROVE_REGISTRATIONS', label: 'Approve Registrations' },
   { id: 'VIEW_TEAM_AUDIT', label: 'View Team Audit Log' },
+  { id: 'VIEW_TASKS', label: 'View Tasks' },
   { id: 'CREATE_TASK', label: 'Create Tasks' },
   { id: 'EDIT_TASK', label: 'Edit Tasks' },
   { id: 'DELETE_TASK', label: 'Delete Tasks' },
