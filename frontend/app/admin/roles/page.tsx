@@ -14,6 +14,7 @@ const ALL_PERMISSIONS = [
   { id: 'REORDER_ROLES', label: 'Reorder Roles' },
   { id: 'MANAGE_USERS', label: 'Manage Users' },
   { id: 'APPROVE_REGISTRATIONS', label: 'Approve Registrations' },
+  { id: 'VIEW_TEAMS', label: 'View Teams' },
   { id: 'VIEW_TEAM_AUDIT', label: 'View Team Audit Log' },
   { id: 'VIEW_TASKS', label: 'View Tasks' },
   { id: 'CREATE_TASK', label: 'Create Tasks' },

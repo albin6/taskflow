@@ -1,6 +1,7 @@
 export const Permissions = {
   // Team Management
   MANAGE_TEAMS: 'MANAGE_TEAMS', // Global Admin only
+  VIEW_TEAMS: 'VIEW_TEAMS',
   ASSIGN_HEAD: 'ASSIGN_HEAD',
 
   // Role Management

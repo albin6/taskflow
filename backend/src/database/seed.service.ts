@@ -79,9 +79,13 @@ export class SeedService implements OnModuleInit {
            }
         }
         
-        // Also ensure they can manage users
+        // Also ensure they can manage users and view teams
         if (!role.permissions.includes('MANAGE_USERS')) {
           role.permissions.push('MANAGE_USERS');
+          changed = true;
+        }
+        if (!role.permissions.includes('VIEW_TEAMS')) {
+          role.permissions.push('VIEW_TEAMS');
           changed = true;
         }
       }

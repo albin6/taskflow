@@ -19,13 +19,13 @@ export class TeamsController {
   }
 
   @Get()
-  @RequirePermissions(Permissions.MANAGE_TEAMS)
+  @RequirePermissions(Permissions.VIEW_TEAMS)
   findAll() {
     return this.teamsService.findAll();
   }
 
   @Get(':id')
-  @RequirePermissions(Permissions.MANAGE_TEAMS)
+  @RequirePermissions(Permissions.VIEW_TEAMS)
   findOne(@Param('id') id: string) {
     return this.teamsService.findOne(id);
   }
