@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '../../../lib/axios';
 import { Plus, Shield, Trash2, Pencil } from 'lucide-react';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
+import BadgeList from '../../../components/ui/badge-list';
 
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
@@ -194,18 +195,7 @@ export default function AdminRolesPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-foreground">{role.level}</td>
                   <td className="px-6 py-4">
-                     <div className="flex flex-wrap gap-1">
-                        {role.permissions.slice(0, 3).map((p: string) => (
-                          <span key={p} className="text-xxs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                            {p.replace('_', ' ')}
-                          </span>
-                        ))}
-                        {role.permissions.length > 3 && (
-                          <span className="text-xxs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-                            +{role.permissions.length - 3} more
-                          </span>
-                        )}
-                     </div>
+                     <BadgeList items={role.permissions} limit={3} />
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">

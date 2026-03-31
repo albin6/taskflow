@@ -5,6 +5,7 @@ import api from '../../../lib/axios';
 import { Plus, Shield, Trash2, Pencil, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../../store/useAuthStore';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
+import BadgeList from '../../../components/ui/badge-list';
 
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
@@ -164,16 +165,7 @@ export default function TeamRolesPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-foreground">{role.level}</td>
                   <td className="px-6 py-4">
-                     <div className="flex flex-wrap gap-1">
-                        {role.permissions.map((p: string) => (
-                          <span key={p} className="text-xxs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                            {p.replace('_', ' ')}
-                          </span>
-                        ))}
-                        {role.permissions.length === 0 && (
-                          <span className="text-xxs text-muted-foreground italic">No permissions</span>
-                        )}
-                     </div>
+                     <BadgeList items={role.permissions} limit={3} />
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
