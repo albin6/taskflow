@@ -26,3 +26,9 @@ export enum TaskPriority {
   HIGH = 'HIGH',
   URGENT = 'URGENT',
 }
+
+export enum RecurrenceFrequency {
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+}

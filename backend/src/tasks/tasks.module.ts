@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TasksService } from './tasks.service';
+import { RecurringTasksService } from './recurring-tasks.service';
 import { TasksController } from './tasks.controller';
+import { RecurringTasksController } from './recurring-tasks.controller';
 import { Task } from './entities/task.entity';
+import { RecurringTask } from './entities/recurring-task.entity';
 import { User } from '../users/entities/user.entity';
 import { Team } from '../teams/entities/team.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task, User, Team])],
-  controllers: [TasksController],
-  providers: [TasksService],
-  exports: [TasksService],
+  imports: [TypeOrmModule.forFeature([Task, RecurringTask, User, Team])],
+  controllers: [TasksController, RecurringTasksController],
+  providers: [TasksService, RecurringTasksService],
+  exports: [TasksService, RecurringTasksService],
 })
 export class TasksModule {}

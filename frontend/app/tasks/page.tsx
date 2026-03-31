@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../lib/axios';
 import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle, Loader2 } from 'lucide-react';
@@ -16,8 +16,14 @@ const taskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title too long'),
   description: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
-  assigneeId: z.string().min(1, 'Please assign the task to at least one user'),
+  assigneeId: z.string().optional(),
+  assigneeIds: z.array(z.string()).optional(),
   dueDate: z.string().optional().nullable(),
+  isRecurring: z.boolean(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']).optional(),
+  daysOfWeek: z.array(z.string()).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional().nullable(),
 });
 
 type TaskFormValues = z.infer<typeof taskSchema>;
@@ -70,6 +76,8 @@ export default function TasksPage() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
@@ -78,9 +86,20 @@ export default function TasksPage() {
       description: '',
       priority: 'MEDIUM',
       assigneeId: '',
+      assigneeIds: [],
       dueDate: '',
+      isRecurring: false,
+      frequency: 'DAILY',
+      daysOfWeek: [],
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
     },
   });
+
+  const isRecurring = watch('isRecurring');
+  const frequency = watch('frequency');
+  const selectedDays = watch('daysOfWeek') || [];
+  const selectedAssigneeIds = watch('assigneeIds') || [];
 
   // Early return for System Admins
   if (user?.level === 0) {
@@ -203,21 +222,48 @@ export default function TasksPage() {
     setIsModalOpen(true);
   };
 
-  const onSaveTask = async (data: TaskFormValues) => {
+  const onSaveTask: SubmitHandler<TaskFormValues> = async (data) => {
     setSubmitting(true);
     try {
-      const payload = {
-        ...data,
-        assigneeId: data.assigneeId || null,
-        dueDate: data.dueDate || null,
-      };
+      if (data.isRecurring) {
+        const payload = {
+          title: data.title,
+          description: data.description,
+          priority: data.priority,
+          frequency: data.frequency,
+          daysOfWeek: data.daysOfWeek,
+          startDate: data.startDate,
+          endDate: data.endDate || null,
+          assigneeIds: data.assigneeIds && data.assigneeIds.length > 0 
+            ? data.assigneeIds 
+            : data.assigneeId ? [data.assigneeId] : [],
+        };
 
-      if (selectedTask) {
-        await api.patch(`/tasks/${selectedTask.id}`, payload);
-        addToast('Task updated successfully', 'success');
+        if (payload.assigneeIds.length === 0) {
+          addToast('Please select at least one assignee for recurring tasks', 'error');
+          setSubmitting(false);
+          return;
+        }
+
+        await api.post('/tasks/recurring', payload);
+        addToast('Recurring task automation set up!', 'success');
       } else {
-        await api.post('/tasks', { ...payload, status: 'TODO' });
-        addToast('New task created!', 'success');
+        const payload = {
+          title: data.title,
+          description: data.description,
+          priority: data.priority,
+          assigneeId: data.assigneeId || null,
+          dueDate: data.dueDate || null,
+          status: 'TODO'
+        };
+
+        if (selectedTask) {
+          await api.patch(`/tasks/${selectedTask.id}`, payload);
+          addToast('Task updated successfully', 'success');
+        } else {
+          await api.post('/tasks', payload);
+          addToast('New task created!', 'success');
+        }
       }
 
       setIsModalOpen(false);
@@ -227,6 +273,28 @@ export default function TasksPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const toggleDay = (day: string) => {
+    const current = selectedDays;
+    if (current.includes(day)) {
+      setValue('daysOfWeek', current.filter(d => d !== day));
+    } else {
+      setValue('daysOfWeek', [...current, day]);
+    }
+  };
+
+  const toggleAssignee = (id: string) => {
+    const current = selectedAssigneeIds;
+    if (current.includes(id)) {
+      setValue('assigneeIds', current.filter(i => i !== id));
+    } else {
+      setValue('assigneeIds', [...current, id]);
+    }
+  };
+
+  const selectAllMembers = () => {
+    setValue('assigneeIds', members.map(m => m.id));
   };
 
   const confirmDeleteTask = (taskId: string) => {
@@ -407,71 +475,171 @@ export default function TasksPage() {
                     <X size={20} />
                   </button>
                </div>
-               <form onSubmit={handleSubmit(onSaveTask)} className="space-y-4">
+                <form onSubmit={handleSubmit(onSaveTask)} className="space-y-4">
+                  {/* Recurring Toggle */}
+                  {!selectedTask && (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/40">
+                      <div className="flex items-center gap-2">
+                         <div className={`p-1.5 rounded-lg ${isRecurring ? 'bg-primary/10' : 'bg-muted/50'}`}>
+                           <Clock className={`h-4 w-4 ${isRecurring ? 'text-primary' : 'text-muted-foreground'}`} />
+                         </div>
+                         <span className="text-xs font-bold text-foreground uppercase tracking-widest">Recurring Task</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          {...register('isRecurring')}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-11 h-6 bg-muted rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+                  )}
+
                   <div>
-                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Title</label>
+                     <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Title</label>
                      <input 
                         {...register('title')}
                         type="text" 
-                        className={`w-full px-3.5 py-2 rounded-lg border bg-background text-sm transition-all ${
+                        className={`w-full px-4 py-2.5 rounded-xl border bg-background text-sm transition-all font-medium ${
                           errors.title ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
                         }`}
-                        placeholder="Task title"
+                        placeholder="e.g. Weekly Status Update"
                      />
                      <InputError message={errors.title?.message} />
                   </div>
-                  <div>
-                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Description</label>
-                     <textarea 
-                        {...register('description')}
-                        className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm h-24 resize-none focus:ring-2 focus:ring-primary/20 transition-all font-medium"
-                        placeholder="Detailed description..."
-                     />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Priority</label>
-                        <select 
-                           {...register('priority')}
-                           className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-medium"
-                        >
-                           <option value="LOW">Low</option>
-                           <option value="MEDIUM">Medium</option>
-                           <option value="HIGH">High</option>
-                        </select>
-                     </div>
-                     <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Assignee</label>
-                        <select 
-                           {...register('assigneeId')}
-                           className={`w-full px-3.5 py-2 rounded-lg border bg-background text-sm transition-all font-medium ${
-                             errors.assigneeId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
-                           }`}
-                        >
-                           <option value="" disabled>Select Assignee...</option>
-                           {members.filter(m => {
-                               const memberLevel = m.role?.level ?? 99;
-                               const actorLevel = user?.level ?? 99;
-                               if (actorLevel === 0) return true;
-                               return memberLevel >= actorLevel;
-                           }).map(m => (
-                               <option key={m.id} value={m.id}>{m.name}</option>
+
+                  {!isRecurring && (
+                    <div>
+                       <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest font-medium">Description</label>
+                       <textarea 
+                          {...register('description')}
+                          className="w-full px-4 py-2 rounded-xl border border-border bg-background text-sm h-20 resize-none focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                          placeholder="Optional details..."
+                       />
+                    </div>
+                  )}
+
+                  {isRecurring ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-primary mb-1.5 uppercase tracking-widest">Frequency</label>
+                          <select 
+                             {...register('frequency')}
+                             className="w-full px-3 py-2 rounded-xl border border-primary/20 bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 shadow-sm transition-all"
+                          >
+                             <option value="DAILY">Daily</option>
+                             <option value="WEEKLY">Weekly</option>
+                             <option value="MONTHLY">Monthly</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-primary mb-1.5 uppercase tracking-widest">Start Date</label>
+                          <input 
+                             {...register('startDate')}
+                             type="date"
+                             className="w-full px-3 py-2 rounded-xl border border-primary/20 bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 shadow-sm transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {frequency === 'WEEKLY' && (
+                        <div>
+                          <label className="block text-xs font-bold text-primary mb-2 uppercase tracking-widest">Repeat On</label>
+                          <div className="flex flex-wrap gap-2">
+                             {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map(day => (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => toggleDay(day)}
+                                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black border transition-all ${
+                                    selectedDays.includes(day) 
+                                    ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20 scale-105' 
+                                    : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                                  }`}
+                                >
+                                  {day.slice(0, 3)}
+                                </button>
+                             ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-bold text-primary uppercase tracking-widest">Auto-Assignees</label>
+                          <button 
+                            type="button" 
+                            onClick={selectAllMembers}
+                            className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
+                          >
+                            Select All team
+                          </button>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto space-y-1.5 p-2 border border-primary/10 rounded-xl bg-background/50 custom-scrollbar">
+                           {members.map(m => (
+                             <label key={m.id} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedAssigneeIds.includes(m.id) ? 'bg-primary/10' : 'hover:bg-muted'}`}>
+                               <input 
+                                 type="checkbox" 
+                                 checked={selectedAssigneeIds.includes(m.id)}
+                                 onChange={() => toggleAssignee(m.id)}
+                                 className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+                               />
+                               <span className="text-xs font-bold text-foreground">{m.name}</span>
+                             </label>
                            ))}
-                        </select>
-                        <InputError message={errors.assigneeId?.message} />
-                     </div>
-                  </div>
-                  <div>
-                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Deadline</label>
-                     <div className="relative">
-                        <input 
-                           {...register('dueDate')}
-                           type="date" 
-                           className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-medium"
-                        />
-                        <Calendar className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                     </div>
-                  </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Priority</label>
+                            <select 
+                               {...register('priority')}
+                               className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                            >
+                               <option value="LOW">Low</option>
+                               <option value="MEDIUM">Medium</option>
+                               <option value="HIGH">High</option>
+                            </select>
+                         </div>
+                         <div>
+                            <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Assignee</label>
+                            <select 
+                               {...register('assigneeId')}
+                               className={`w-full px-4 py-2.5 rounded-xl border bg-background text-sm transition-all font-bold ${
+                                 errors.assigneeId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
+                               }`}
+                            >
+                               <option value="" disabled>Select Assignee...</option>
+                               {members.filter(m => {
+                                   const memberLevel = m.role?.level ?? 99;
+                                   const actorLevel = user?.level ?? 99;
+                                   if (actorLevel === 0) return true;
+                                   return memberLevel >= actorLevel;
+                               }).map(m => (
+                                   <option key={m.id} value={m.id}>{m.name}</option>
+                               ))}
+                            </select>
+                            <InputError message={errors.assigneeId?.message} />
+                         </div>
+                      </div>
+                      <div>
+                         <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest font-medium">Deadline</label>
+                         <div className="relative">
+                            <input 
+                               {...register('dueDate')}
+                               type="date" 
+                               className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                            />
+                            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                         </div>
+                      </div>
+                    </>
+                  )}
                   <div className="flex gap-2 justify-end pt-4 border-t border-border mt-2">
                      <button type="button" onClick={()=>setIsModalOpen(false)} className="px-5 py-2 rounded-lg border border-border hover:bg-muted font-bold text-sm transition-colors">Cancel</button>
                      <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
