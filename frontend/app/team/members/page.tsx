@@ -14,6 +14,7 @@ const memberSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   phone: z.string().optional(),
+  teamId: z.string().min(1, 'Team is required'),
   roleId: z.string().min(1, 'Role is required'),
 });
 
@@ -22,6 +23,9 @@ type MemberFormValues = z.infer<typeof memberSchema>;
 export default function TeamMembersPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [activeTeams, setActiveTeams] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -34,6 +38,8 @@ export default function TeamMembersPage() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<MemberFormValues>({
     resolver: zodResolver(memberSchema),
@@ -42,14 +48,39 @@ export default function TeamMembersPage() {
       email: '',
       password: '',
       phone: '',
+      teamId: user?.teamId || '',
       roleId: '',
     },
   });
 
+  const memberTeamId = watch('teamId');
+
   useEffect(() => {
-    fetchMembers();
-    fetchRoles();
-  }, [user?.teamId]);
+    if (user) {
+      if (user.teamId) setValue('teamId', user.teamId);
+      fetchMembers();
+      fetchGlobalTeams();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (memberTeamId) {
+      fetchRoles(memberTeamId);
+    } else {
+      setRoles([]);
+    }
+  }, [memberTeamId]);
+
+  useEffect(() => {
+    // Extract unique teams from visible members for the tab bar
+    const teamsInRoster = members.reduce((acc: any[], m) => {
+      if (m.team && !acc.find(t => t.id === m.team.id)) {
+        acc.push(m.team);
+      }
+      return acc;
+    }, []);
+    setActiveTeams(teamsInRoster);
+  }, [members]);
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -63,28 +94,33 @@ export default function TeamMembersPage() {
     }
   };
 
-  const fetchRoles = async () => {
-    if (!user?.teamId) return;
+  const fetchGlobalTeams = async () => {
     try {
-      const res = await api.get(`/roles?teamId=${user.teamId}`);
-      setRoles(res.data.filter((r: any) => r.level > (user.level || 99)));
+      const res = await api.get('/teams');
+      setTeams(res.data);
+    } catch (err) {
+      console.error('Failed to fetch teams', err);
+    }
+  };
+
+  const fetchRoles = async (teamId: string) => {
+    try {
+      const res = await api.get(`/roles?teamId=${teamId}`);
+      // Only show roles that are strictly lower level than current user
+      // If user is Admin (0), show all. If Head (1), show Level 2+.
+      setRoles(res.data.filter((r: any) => r.level > (user?.level || 0)));
     } catch (err) {
       console.error('Failed to fetch roles', err);
     }
   };
 
   const onSubmit = async (data: MemberFormValues) => {
-    if (!user?.teamId) return;
-
     setSubmitting(true);
     setServerError('');
-
+ 
     try {
-      await api.post('/users', {
-        ...data,
-        teamId: user.teamId,
-      });
-
+      await api.post('/users', data);
+ 
       setIsModalOpen(false);
       reset();
       fetchMembers();
@@ -94,6 +130,10 @@ export default function TeamMembersPage() {
       setSubmitting(false);
     }
   };
+ 
+  const filteredMembers = selectedTeamId === 'all' 
+    ? members 
+    : members.filter(m => m.team?.id === selectedTeamId);
 
   const openModal = () => {
     reset();
@@ -117,9 +157,42 @@ export default function TeamMembersPage() {
         </button>
       </div>
 
+      {activeTeams.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <button
+            onClick={() => setSelectedTeamId('all')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap border ${
+              selectedTeamId === 'all' 
+                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' 
+                : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+            }`}
+          >
+            All Teams
+          </button>
+          {activeTeams.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setSelectedTeamId(t.id)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap border ${
+                selectedTeamId === t.id 
+                  ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' 
+                  : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+              }`}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="bg-card rounded-2xl border border-border/60 overflow-hidden shadow-sm">
-        <div className="p-5 border-b border-border/40 bg-muted/20">
-          <h2 className="text-lg font-bold text-foreground">Active Roster</h2>
+        <div className="p-5 border-b border-border/40 bg-muted/20 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">
+            {selectedTeamId === 'all' ? 'Active Roster' : `${activeTeams.find(t => t.id === selectedTeamId)?.name} Roster`}
+          </h2>
+          <span className="text-xs font-bold px-2 py-1 bg-primary/10 text-primary rounded-lg uppercase tracking-wider">
+            {filteredMembers.length} Members
+          </span>
         </div>
         <div className="overflow-x-auto">
           {loading && members.length === 0 ? (
@@ -135,9 +208,14 @@ export default function TeamMembersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
-                {members.map((member) => (
+                {filteredMembers.map((member) => (
                   <tr key={member.id} className="hover:bg-muted/30 transition-colors group">
-                    <td className="px-6 py-4 font-bold text-foreground">{member.name}</td>
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-foreground">{member.name}</div>
+                      {selectedTeamId === 'all' && member.team && (
+                        <div className="text-[10px] uppercase tracking-widest font-black text-primary/60">{member.team.name}</div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground font-medium">{member.email}</td>
                     <td className="px-6 py-4 text-sm text-foreground">
                        <span className="px-2 py-1 bg-primary/5 text-primary rounded-lg font-bold text-xs">
@@ -154,10 +232,10 @@ export default function TeamMembersPage() {
                     </td>
                   </tr>
                 ))}
-                {members.length === 0 && (
+                {filteredMembers.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground text-sm italic font-medium">
-                      No members identified in this team container.
+                      No members identified {selectedTeamId === 'all' ? 'in this workspace' : 'in this team container'}.
                     </td>
                   </tr>
                 )}
@@ -237,6 +315,21 @@ export default function TeamMembersPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-medium"
                   placeholder="+123456789"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Target Team</label>
+                <select 
+                  {...register('teamId')}
+                  disabled={!!user?.teamId}
+                  className={`w-full px-4 py-2.5 rounded-xl border bg-background text-sm transition-all font-bold disabled:opacity-70 ${
+                    errors.teamId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
+                  }`}
+                >
+                  <option value="">Select Team</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <InputError message={errors.teamId?.message} />
               </div>
 
               <div>
