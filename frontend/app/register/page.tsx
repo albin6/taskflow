@@ -4,57 +4,75 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../lib/axios';
+import InputError from '../../components/ui/input-error';
+
+const registerSchema = z.object({
+  name: z.string().min(3, 'Full name must be at least 3 characters'),
+  email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  phone: z.string().optional(),
+  teamId: z.string().min(1, 'Please select a team'),
+  roleId: z.string().min(1, 'Please select a role'),
+});
+
+type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [phone, setPhone] = useState('');
-  
   const [teams, setTeams] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState('');
-  const [selectedRole, setSelectedRole] = useState('');
-
+  
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    mode: 'onChange',
+  });
+
+  const selectedTeamId = watch('teamId');
+
   useEffect(() => {
-    // 1. Fetch Candidates (Teams)
     api.get('/auth/teams')
        .then(res => setTeams(res.data))
        .catch(err => console.error('Failed to load teams', err));
   }, []);
 
   useEffect(() => {
-    // 2. Fetch Dependent Candidates (Roles)
-    if (selectedTeam) {
-       api.get(`/auth/roles/${selectedTeam}`)
-          .then(res => setRoles(res.data))
+    if (selectedTeamId) {
+       api.get(`/auth/roles/${selectedTeamId}`)
+          .then(res => {
+            setRoles(res.data);
+            // Reset role if it's not valid for the new team
+            setValue('roleId', '');
+          })
           .catch(err => console.error('Failed to load roles', err));
     } else {
        setRoles([]);
     }
-  }, [selectedTeam]);
+  }, [selectedTeamId, setValue]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: RegisterFormValues) => {
     setError('');
     setSuccess('');
     setLoading(true);
 
     try {
       const payload = {
-         name,
-         email,
-         password,
-         phone: phone || undefined,
-         teamId: selectedTeam,
-         roleId: selectedRole
+         ...data,
+         phone: data.phone || undefined,
       };
 
       const res = await api.post('/auth/register', payload);
@@ -82,94 +100,100 @@ export default function RegisterPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-600 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-600 text-sm font-medium">
             {success}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Full Name</label>
             <input
+              {...register('name')}
               type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
+              className={`w-full px-3.5 py-2 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm ${
+                errors.name ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+              }`}
               placeholder="John Doe"
             />
+            <InputError message={errors.name?.message} />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Email</label>
             <input
+              {...register('email')}
               type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
-              className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
+              className={`w-full px-3.5 py-2 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm ${
+                errors.email ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+              }`}
               placeholder="you@example.com"
             />
+            <InputError message={errors.email?.message} />
           </div>
  
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Password</label>
             <div className="relative">
               <input
+                {...register('password')}
                 type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                className="w-full px-3.5 py-2 pr-10 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
+                className={`w-full px-3.5 py-2 pr-10 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm ${
+                  errors.password ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+                }`}
                 placeholder="Min 6 characters"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            <InputError message={errors.password?.message} />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Join Team</label>
             <select
-              required
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm"
+              {...register('teamId')}
+              className={`w-full px-3.5 py-2 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm ${
+                errors.teamId ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+              }`}
             >
-              <option value="" disabled>Select Team...</option>
+              <option value="">Select Team...</option>
               {teams.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
+            <InputError message={errors.teamId?.message} />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Desired Role</label>
             <select
-              required
-              disabled={!selectedTeam}
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow text-sm disabled:opacity-50"
+              {...register('roleId')}
+              disabled={!selectedTeamId}
+              className={`w-full px-3.5 py-2 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm disabled:opacity-50 ${
+                errors.roleId ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+              }`}
             >
-              <option value="" disabled>Select Role...</option>
+              <option value="">Select Role...</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
+            <InputError message={errors.roleId?.message} />
           </div>
 
           <button

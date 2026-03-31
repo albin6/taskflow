@@ -1,10 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { useForm, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../../lib/axios';
-import { Plus, Shield, Trash2, Pencil } from 'lucide-react';
+import { Plus, Shield, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
 import BadgeList from '../../../components/ui/badge-list';
+import InputError from '../../../components/ui/input-error';
 
 const ALL_PERMISSIONS = [
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
@@ -18,6 +22,13 @@ const ALL_PERMISSIONS = [
   { id: 'ASSIGN_TASK', label: 'Assign Tasks' },
 ];
 
+const roleSchema = z.object({
+  name: z.string().min(2, 'Role name is required'),
+  permissions: z.array(z.string()),
+});
+
+type RoleFormValues = z.infer<typeof roleSchema>;
+
 export default function AdminRolesPage() {
   const [teams, setTeams] = useState<any[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
@@ -30,11 +41,25 @@ export default function AdminRolesPage() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
-  // Form State
-  const [roleName, setRoleName] = useState('');
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<RoleFormValues>({
+    resolver: zodResolver(roleSchema),
+    defaultValues: {
+      name: '',
+      permissions: [],
+    },
+  });
+
+  const currentPermissions = watch('permissions');
 
   useEffect(() => {
     fetchTeams();
@@ -53,7 +78,7 @@ export default function AdminRolesPage() {
       const res = await api.get('/teams');
       setTeams(res.data);
       if (res.data.length > 0) {
-        setSelectedTeamId(res.data[0].id); // Default to first team
+        setSelectedTeamId(res.data[0].id);
       }
     } catch (err) {
       console.error('Failed to fetch teams', err);
@@ -73,54 +98,51 @@ export default function AdminRolesPage() {
   };
 
   const handlePermissionChange = (permId: string) => {
-    setSelectedPermissions(prev => 
-      prev.includes(permId) ? prev.filter(p => p !== permId) : [...prev, permId]
-    );
+    const updated = currentPermissions.includes(permId)
+      ? currentPermissions.filter(p => p !== permId)
+      : [...currentPermissions, permId];
+    setValue('permissions', updated);
   };
 
   const openCreateModal = () => {
     setEditingRole(null);
-    setRoleName('');
-    setSelectedPermissions([]);
-    setError('');
+    setServerError('');
+    reset({ name: '', permissions: [] });
     setIsModalOpen(true);
   };
 
   const openEditModal = (role: any) => {
     setEditingRole(role);
-    setRoleName(role.name);
-    setSelectedPermissions(role.permissions);
-    setError('');
+    setServerError('');
+    reset({
+      name: role.name,
+      permissions: role.permissions || [],
+    });
     setIsModalOpen(true);
   };
 
-  const handleSubmitRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roleName.trim() || !selectedTeamId) return;
+  const onSubmit: SubmitHandler<RoleFormValues> = async (data) => {
+    if (!selectedTeamId) return;
 
     setSubmitting(true);
-    setError('');
+    setServerError('');
 
     try {
       if (editingRole) {
-        await api.patch(`/roles/${editingRole.id}`, {
-          name: roleName,
-          permissions: selectedPermissions,
-        });
+        await api.patch(`/roles/${editingRole.id}`, data);
       } else {
         await api.post('/roles', {
-          name: roleName,
-          permissions: selectedPermissions,
+          ...data,
           teamId: selectedTeamId
         });
       }
       setIsModalOpen(false);
-      fetchRoles(selectedTeamId); // Reload
+      fetchRoles(selectedTeamId);
     } catch (err: any) {
       if (err.response?.status === 409) {
-        setError(`A role with the name "${roleName}" already exists for this team.`);
+        setServerError(`A role with the name "${data.name}" already exists for this team.`);
       } else {
-        setError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
+        setServerError(err.response?.data?.message || `Failed to ${editingRole ? 'update' : 'create'} role.`);
       }
     } finally {
       setSubmitting(false);
@@ -138,7 +160,7 @@ export default function AdminRolesPage() {
       await api.delete(`/roles/${roleToDelete}`);
       setIsConfirmModalOpen(false);
       setRoleToDelete(null);
-      fetchRoles(selectedTeamId); // Reload
+      fetchRoles(selectedTeamId);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to delete role.');
     }
@@ -148,14 +170,14 @@ export default function AdminRolesPage() {
     <div className="space-y-6 h-full overflow-y-auto pb-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Roles</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage custom hierarchy levels and accessible actions buckets</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/70">Team Roles</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium italic">Manage custom hierarchy levels and accessible action permissions</p>
         </div>
         <div className="flex gap-3">
           <select 
             value={selectedTeamId} 
             onChange={(e) => setSelectedTeamId(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="px-4 py-2 rounded-xl border border-border/60 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
           >
             <option value="">Select a Team</option>
             {teams.map(team => (
@@ -165,35 +187,39 @@ export default function AdminRolesPage() {
           <button 
             onClick={openCreateModal}
             disabled={!selectedTeamId}
-            className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 active:scale-95"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4 stroke-[3px]" />
             Add Role
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading roles...</div>
+        <div className="text-center py-12 text-muted-foreground animate-pulse font-medium italic">Synchronizing roles...</div>
       ) : (
-        <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="bg-card rounded-2xl border border-border/60 overflow-hidden shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-muted/50">
-                <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Role Name</th>
-                <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hierarchy Level</th>
-                <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Permissions</th>
-                <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Role Name</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Hierarchy</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Permissions</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-border/30">
               {roles.map((role) => (
-                <tr key={role.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-4 flex items-center gap-2 font-medium text-foreground">
-                    <Shield className="h-4 w-4 text-primary" />
+                <tr key={role.id} className="hover:bg-muted/30 transition-colors group">
+                  <td className="px-6 py-4 flex items-center gap-3 font-semibold text-foreground">
+                    <div className="p-2 rounded-lg bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                      <Shield className="h-4 w-4 text-primary" />
+                    </div>
                     {role.name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-foreground">{role.level}</td>
+                  <td className="px-6 py-4 text-sm font-medium">
+                    <span className="px-2 py-1 bg-muted rounded-lg text-muted-foreground">Level {role.level}</span>
+                  </td>
                   <td className="px-6 py-4">
                      <BadgeList items={role.permissions} limit={3} />
                   </td>
@@ -201,18 +227,18 @@ export default function AdminRolesPage() {
                     <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={() => openEditModal(role)}
-                        className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-primary/10 transition-colors"
+                        className="text-primary hover:text-primary/80 p-2 rounded-xl hover:bg-primary/10 transition-colors"
                         title="Edit Role"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-4.5 w-4.5" />
                       </button>
-                      {role.level > 2 && ( // Anchor roles Admin(0), Head(1), Lead(2) cannot be deleted
+                      {role.level > 2 && (
                         <button 
                           onClick={() => confirmDeleteRole(role.id)}
-                          className="text-red-500 hover:text-red-600 p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
+                          className="text-red-500 hover:text-red-600 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
                           title="Delete Role"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4.5 w-4.5" />
                         </button>
                       )}
                     </div>
@@ -221,8 +247,8 @@ export default function AdminRolesPage() {
               ))}
               {roles.length === 0 && selectedTeamId && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                    No custom roles found for this team.
+                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground text-sm italic font-medium">
+                    No custom roles found for this team segment.
                   </td>
                 </tr>
               )}
@@ -231,59 +257,67 @@ export default function AdminRolesPage() {
         </div>
       )}
 
-      {/* Role Modal (Combined Create/Edit) */}
+      {/* Role Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-card w-full max-w-lg p-6 rounded-2xl border border-border shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-foreground">
-              {editingRole ? 'Edit Role' : 'Create New Role'}
-            </h2>
-            {error && <div className="p-2 text-xs text-red-500 bg-red-500/10 rounded-md">{error}</div>}
+          <div className="bg-card w-full max-w-lg p-6 rounded-2xl border border-border shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-foreground">
+                {editingRole ? 'Edit Custom Role' : 'Establish New Role'}
+              </h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X size={20} />
+              </button>
+            </div>
             
-            <form onSubmit={handleSubmitRole} className="space-y-4">
+            {serverError && <div className="mb-4 p-3 text-sm font-medium text-red-500 bg-red-500/10 border border-red-500/20 rounded-xl">{serverError}</div>}
+            
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-1">Role Name</label>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Role Name</label>
                 <input 
+                  {...register('name')}
                   type="text" 
-                  required 
-                  value={roleName} 
-                  onChange={(e) => setRoleName(e.target.value)} 
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                  placeholder="e.g., Designer, QA"
+                  className={`w-full px-4 py-2.5 rounded-xl border bg-background text-sm transition-all font-medium ${
+                    errors.name ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
+                  }`}
+                  placeholder="e.g., Lead Architect, QA Engineer"
                 />
+                <InputError message={errors.name?.message} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Permissions</label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-border/60 rounded-lg">
+                <label className="block text-xs font-bold text-muted-foreground mb-3 uppercase tracking-widest">Permission Scope</label>
+                <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-3 border border-border/60 rounded-xl bg-muted/5 custom-scrollbar">
                   {ALL_PERMISSIONS.map(p => (
-                    <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted p-1 rounded">
+                    <label key={p.id} className={`flex items-center gap-3 text-xs cursor-pointer p-2 rounded-lg transition-colors ${currentPermissions.includes(p.id) ? 'bg-primary/5 text-primary' : 'hover:bg-muted font-medium'}`}>
                       <input 
                         type="checkbox" 
-                        checked={selectedPermissions.includes(p.id)}
+                        checked={currentPermissions.includes(p.id)}
                         onChange={() => handlePermissionChange(p.id)}
-                        className="rounded border-border text-primary focus:ring-primary/50"
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
                       />
-                      <span>{p.label}</span>
+                      <span className="font-bold tracking-tight">{p.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div className="flex gap-2 justify-end pt-2 border-t border-border">
+              <div className="flex gap-3 justify-end pt-4 border-t border-border/40">
                 <button 
                   type="button" 
-                  onClick={() => { setIsModalOpen(false); setError(''); }} 
-                  className="px-4 py-2 rounded-lg border border-border hover:bg-muted font-medium text-sm"
+                  onClick={() => setIsModalOpen(false)} 
+                  className="px-6 py-2.5 rounded-xl border border-border hover:bg-muted font-bold text-sm transition-all"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
                 >
-                  {submitting ? (editingRole ? 'Updating...' : 'Creating...') : (editingRole ? 'Update Role' : 'Create Role')}
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {submitting ? 'Processing...' : editingRole ? 'Update Role' : 'Create Role'}
                 </button>
               </div>
             </form>

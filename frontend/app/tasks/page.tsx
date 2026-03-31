@@ -1,13 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../lib/axios';
 import { Plus, CheckSquare, Clock, CheckCircle2, Edit3, Trash2, Check, X, Calendar, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import ConfirmationModal from '../../components/ui/confirmation-modal';
 import { ToastContainer } from '../../components/ui/toast';
 import TaskCard from '../../components/tasks/task-card';
-import { useCallback, useRef } from 'react';
+import InputError from '../../components/ui/input-error';
+
+const taskSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(100, 'Title too long'),
+  description: z.string().optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+  assigneeId: z.string().min(1, 'Please assign the task to at least one user'),
+  dueDate: z.string().optional().nullable(),
+});
+
+type TaskFormValues = z.infer<typeof taskSchema>;
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -30,7 +43,7 @@ export default function TasksPage() {
     });
     if (node) observer.current.observe(node);
   }, [loading, loadingMore, hasMore]);
- 
+  
   // Toast State
   const [toasts, setToasts] = useState<any[]>([]);
   const addToast = (message: string, type: 'success' | 'error' | 'warning' | 'info') => {
@@ -47,19 +60,27 @@ export default function TasksPage() {
 
   const { user } = useAuthStore();
   const canCreate = user?.level !== 0 && user?.permissions?.includes('CREATE_TASK');
-  
-  // Assignee Restriction: Assignees CANNOT edit if not creator/manager
   const canEditGeneral = user?.level !== 0 && user?.permissions?.includes('EDIT_TASK');
 
   // Modal / Form State
   const [selectedTask, setSelectedTask] = useState<any>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [dueDate, setDueDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<TaskFormValues>({
+    resolver: zodResolver(taskSchema),
+    defaultValues: {
+      title: '',
+      description: '',
+      priority: 'MEDIUM',
+      assigneeId: '',
+      dueDate: '',
+    },
+  });
 
   // Early return for System Admins
   if (user?.level === 0) {
@@ -138,12 +159,11 @@ export default function TasksPage() {
     if (!taskId) return;
 
     const task = tasks.find(t => t.id === taskId);
-    if (task && !canDropTask(task)) return; // Prevent illegal moves
+    if (task && !canDropTask(task)) return;
 
     try {
       await api.patch(`/tasks/${taskId}`, { status: targetStatus });
       addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
-      // Update local state optimistically for speed
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
     } catch (err: any) {
       const status = err.response?.status;
@@ -154,7 +174,6 @@ export default function TasksPage() {
       } else {
         addToast(err.response?.data?.message || 'Failed to update task status.', 'error');
       }
-      console.error('Failed to update task status', err);
     }
   };
 
@@ -165,40 +184,32 @@ export default function TasksPage() {
   const openModal = (task: any = null) => {
     setSelectedTask(task);
     if (task) {
-       setTitle(task.title);
-       setDescription(task.description || '');
-       setPriority(task.priority);
-       setAssigneeId(task.assignee?.id || '');
-       setDueDate(task.dueDate ? task.dueDate.split('T')[0] : '');
+      reset({
+        title: task.title,
+        description: task.description || '',
+        priority: task.priority,
+        assigneeId: task.assignee?.id || '',
+        dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+      });
     } else {
-       setTitle('');
-       setDescription('');
-       setPriority('MEDIUM');
-       setAssigneeId('');
-       setDueDate('');
+      reset({
+        title: '',
+        description: '',
+        priority: 'MEDIUM',
+        assigneeId: '',
+        dueDate: '',
+      });
     }
-    setShowErrors(false);
     setIsModalOpen(true);
   };
 
-  const handleCreateOrUpdateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    
-    if (!assigneeId) {
-      setShowErrors(true);
-      addToast('Please assign the task to at least one user', 'error');
-      return;
-    }
-
+  const onSaveTask = async (data: TaskFormValues) => {
     setSubmitting(true);
     try {
       const payload = {
-        title,
-        description,
-        priority,
-        assigneeId: assigneeId || null,
-        dueDate: dueDate || null,
+        ...data,
+        assigneeId: data.assigneeId || null,
+        dueDate: data.dueDate || null,
       };
 
       if (selectedTask) {
@@ -210,8 +221,7 @@ export default function TasksPage() {
       }
 
       setIsModalOpen(false);
-      setShowErrors(false);
-      fetchTasks(1, true); // Refresh from first page
+      fetchTasks(1, true);
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Failed to save task.', 'error');
     } finally {
@@ -231,20 +241,18 @@ export default function TasksPage() {
       addToast('Task deleted successfully', 'success');
       setIsConfirmModalOpen(false);
       setTaskToDelete(null);
-      fetchTasks(1, true); // Refresh
+      fetchTasks(1, true);
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Failed to delete task.', 'error');
-      console.error('Failed to delete task', err);
     }
   };
 
   const handleApproveTask = async (taskId: string) => {
     try {
       await api.patch(`/tasks/${taskId}/approve`);
-      setTasks(prev => prev.filter(t => t.id !== taskId)); // Remove since it's approved
+      setTasks(prev => prev.filter(t => t.id !== taskId));
       addToast('Task approved!', 'success');
     } catch (err) {
-      console.error('Failed to approve task', err);
       addToast('Failed to approve task', 'error');
     }
   };
@@ -255,17 +263,14 @@ export default function TasksPage() {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'IN_PROGRESS' } : t));
       addToast('Task rejected - moved back to In Progress', 'info');
     } catch (err) {
-      console.error('Failed to reject task', err);
       addToast('Failed to reject task', 'error');
     }
   };
 
-  // Determine if actor can manage total details
   const canManageTask = (task: any): boolean => {
      const isOwner = task.creator?.id === user?.userId;
      const isAssignee = task.assignee?.id === user?.userId;
      const isManager = (user?.level !== undefined && user.level <= 2);
-     
      if (isAssignee && !isOwner && !isManager) return false;
      return !!(user?.level === 0 || isOwner || isManager || canEditGeneral);
   };
@@ -274,7 +279,6 @@ export default function TasksPage() {
      const isOwner = task.creator?.id === user?.userId;
      const isAssignee = task.assignee?.id === user?.userId;
      const isManager = (user?.level !== undefined && user.level <= 2);
-     
      return !!(isOwner || isManager || isAssignee || canEditGeneral);
   };
 
@@ -284,13 +288,11 @@ export default function TasksPage() {
      const isSelfAssigned = task.assignee?.id === task.creator?.id;
 
      if (task.status !== 'DONE') return false;
-
      if (isSelfAssigned) {
         const actorLevel = user?.level ?? 99;
         const creatorLevel = task.creator?.creator_role?.level ?? 99;
         return !!(actorLevel < creatorLevel || user?.level === 0); 
      }
-
      return !!(isAssigner || isManager || user?.level === 0);
   };
 
@@ -339,7 +341,6 @@ export default function TasksPage() {
             onDragOver={allowDrop}
             onDrop={(e) => handleDrop(e, col.id)}
           >
-            {/* Sticky Header Container */}
             <div className="sticky top-0 z-20 flex items-center justify-between p-4 border-b border-border/30 bg-muted/40 backdrop-blur-md rounded-t-2xl shadow-sm">
               <div className="flex items-center gap-2.5">
                 <div className={`p-1.5 rounded-lg bg-card border border-border/40 shadow-xs ${col.color.replace('text-', 'bg-').replace('-500', '-500/10')}`}>
@@ -351,8 +352,7 @@ export default function TasksPage() {
                 </span>
               </div>
             </div>
- 
-            {/* Scrollable Task Area */}
+
             <div className="p-3 space-y-4 flex-1 overflow-y-auto pb-8 custom-scrollbar">
               {tasks.filter(t => t.status === col.id).map((task, index, filteredTasks) => {
                 const isLastTask = index === filteredTasks.length - 1;
@@ -401,63 +401,82 @@ export default function TasksPage() {
       {isModalOpen && (
          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-card w-full max-w-md p-6 rounded-2xl border border-border shadow-2xl space-y-4">
-               <h2 className="text-lg font-bold text-foreground">{selectedTask ? 'Edit Task' : 'Create Task'}</h2>
-               <form onSubmit={handleCreateOrUpdateTask} className="space-y-3">
+               <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-foreground">{selectedTask ? 'Edit Task' : 'Create Task'}</h2>
+                  <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                    <X size={20} />
+                  </button>
+               </div>
+               <form onSubmit={handleSubmit(onSaveTask)} className="space-y-4">
                   <div>
-                     <label className="block text-xs font-medium mb-1">Title</label>
-                     <input type="text" required value={title} onChange={(e)=>setTitle(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"/>
+                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Title</label>
+                     <input 
+                        {...register('title')}
+                        type="text" 
+                        className={`w-full px-3.5 py-2 rounded-lg border bg-background text-sm transition-all ${
+                          errors.title ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
+                        }`}
+                        placeholder="Task title"
+                     />
+                     <InputError message={errors.title?.message} />
                   </div>
                   <div>
-                     <label className="block text-xs font-medium mb-1">Description</label>
-                     <textarea value={description} onChange={(e)=>setDescription(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm h-20"/>
+                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Description</label>
+                     <textarea 
+                        {...register('description')}
+                        className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm h-24 resize-none focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                        placeholder="Detailed description..."
+                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <label className="block text-xs font-medium mb-1">Priority</label>
-                        <select value={priority} onChange={(e)=>setPriority(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Priority</label>
+                        <select 
+                           {...register('priority')}
+                           className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                        >
                            <option value="LOW">Low</option>
                            <option value="MEDIUM">Medium</option>
                            <option value="HIGH">High</option>
                         </select>
                      </div>
                      <div>
-                        <label className="block text-xs font-medium mb-1">Assignee</label>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Assignee</label>
                         <select 
-                           value={assigneeId} 
-                           onChange={(e)=>{
-                              setAssigneeId(e.target.value);
-                              if (e.target.value) setShowErrors(false);
-                           }} 
-                           className={`w-full px-3 py-2 rounded-lg border bg-background text-sm transition-all ${showErrors && !assigneeId ? 'border-red-500 ring-2 ring-red-500/20' : 'border-border'}`}
+                           {...register('assigneeId')}
+                           className={`w-full px-3.5 py-2 rounded-lg border bg-background text-sm transition-all font-medium ${
+                             errors.assigneeId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
+                           }`}
                         >
                            <option value="" disabled>Select Assignee...</option>
                            {members.filter(m => {
-                              const memberLevel = m.role?.level ?? 99;
-                              const actorLevel = user?.level ?? 99;
-                              if (actorLevel === 0) return true;
-                              return memberLevel >= actorLevel;
+                               const memberLevel = m.role?.level ?? 99;
+                               const actorLevel = user?.level ?? 99;
+                               if (actorLevel === 0) return true;
+                               return memberLevel >= actorLevel;
                            }).map(m => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
+                               <option key={m.id} value={m.id}>{m.name}</option>
                            ))}
                         </select>
+                        <InputError message={errors.assigneeId?.message} />
                      </div>
                   </div>
                   <div>
-                     <label className="block text-xs font-medium mb-1">Deadline</label>
+                     <label className="block text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Deadline</label>
                      <div className="relative">
                         <input 
+                           {...register('dueDate')}
                            type="date" 
-                           value={dueDate} 
-                           onChange={(e)=>setDueDate(e.target.value)} 
-                           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                           className="w-full px-3.5 py-2 rounded-lg border border-border bg-background text-sm focus:ring-2 focus:ring-primary/20 transition-all font-medium"
                         />
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Calendar className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                      </div>
                   </div>
-                  <div className="flex gap-2 justify-end pt-3 border-t border-border mt-1">
-                     <button type="button" onClick={()=>setIsModalOpen(false)} className="px-4 py-2 rounded-lg border border-border hover:bg-muted font-medium text-sm">Cancel</button>
-                     <button type="submit" disabled={submitting} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium text-sm transition-all focus:ring-2 focus:ring-primary/50">
-                        {submitting ? 'Saving...' : selectedTask ? 'Update' : 'Create'}
+                  <div className="flex gap-2 justify-end pt-4 border-t border-border mt-2">
+                     <button type="button" onClick={()=>setIsModalOpen(false)} className="px-5 py-2 rounded-lg border border-border hover:bg-muted font-bold text-sm transition-colors">Cancel</button>
+                     <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
+                        {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {submitting ? 'Saving...' : selectedTask ? 'Update Task' : 'Create Task'}
                      </button>
                   </div>
                </form>

@@ -4,12 +4,21 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/useAuthStore';
+import InputError from '../../components/ui/input-error';
+
+const loginSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,16 +26,23 @@ export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onChange',
+  });
+
+  const onSubmit = async (data: LoginFormValues) => {
     setError('');
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', data);
       const { accessToken } = response.data;
 
-      // Fetch Profile to get details (level, permissions, etc.)
       const profileResponse = await api.get('/auth/me', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -57,18 +73,19 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1.5">Email Address</label>
             <input
+              {...register('email')}
               type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
-              className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+              className={`w-full px-4 py-2.5 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all ${
+                errors.email ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+              }`}
               placeholder="you@example.com"
             />
+            <InputError message={errors.email?.message} />
           </div>
  
           <div>
@@ -80,12 +97,12 @@ export default function LoginPage() {
             </div>
             <div className="relative">
               <input
+                {...register('password')}
                 type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="w-full px-4 py-2.5 pr-11 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+                className={`w-full px-4 py-2.5 pr-11 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all ${
+                  errors.password ? 'border-red-500 ring-1 ring-red-500/20' : 'border-border'
+                }`}
                 placeholder="••••••••"
               />
               <button
@@ -97,6 +114,7 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            <InputError message={errors.password?.message} />
           </div>
 
           <button
