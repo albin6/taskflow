@@ -18,6 +18,7 @@ export class TasksController {
   }
 
   @Get()
+  @RequirePermissions(Permissions.VIEW_TASKS)
   findAll(
     @Req() req: any,
     @Query('page') page: number = 1,
@@ -28,6 +29,7 @@ export class TasksController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permissions.VIEW_TASKS)
   findOne(@Param('id') id: string) {
     return this.tasksService.findOne(id);
   }

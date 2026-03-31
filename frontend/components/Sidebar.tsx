@@ -31,7 +31,7 @@ export default function Sidebar() {
       label: 'Tasks',
       icon: CheckSquare,
       href: '/tasks',
-      visible: true,
+      visible: user.level !== 0,
     },
     {
       label: 'Teams',

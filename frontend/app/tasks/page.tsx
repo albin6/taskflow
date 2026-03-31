@@ -46,10 +46,10 @@ export default function TasksPage() {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
 
   const { user } = useAuthStore();
-  const canCreate = user?.level === 0 || user?.permissions?.includes('CREATE_TASK');
+  const canCreate = user?.level !== 0 && user?.permissions?.includes('CREATE_TASK');
   
   // Assignee Restriction: Assignees CANNOT edit if not creator/manager
-  const canEditGeneral = user?.level === 0 || user?.permissions?.includes('EDIT_TASK');
+  const canEditGeneral = user?.level !== 0 && user?.permissions?.includes('EDIT_TASK');
 
   // Modal / Form State
   const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -60,6 +60,29 @@ export default function TasksPage() {
   const [dueDate, setDueDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+
+  // Early return for System Admins
+  if (user?.level === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-card rounded-xl border border-border shadow-sm m-6">
+        <div className="h-16 w-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-6">
+          <AlertCircle className="h-8 w-8 text-red-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Access Restricted</h2>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          System Administrators are restricted from accessing the task management module. 
+          Task management is reserved for Team Leads, Heads, and Members to maintain a clear 
+          separation of system administration and workflow responsibilities.
+        </p>
+        <button 
+          onClick={() => window.location.href = '/dashboard'}
+          className="mt-8 px-6 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   const columns = [
     { id: 'TODO', label: 'To Do', icon: CheckSquare, color: 'text-blue-500' },
