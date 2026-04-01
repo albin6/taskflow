@@ -142,7 +142,7 @@ export default function TeamMembersPage() {
   };
 
   return (
-    <div className="space-y-6 h-full overflow-y-auto pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pb-8">
       <div className="flex items-center justify-between">
         <div className="animate-in fade-in slide-in-from-left-4 duration-500">
           <h1 className="text-2xl font-extrabold tracking-tight text-foreground text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/70">Team Workspace</h1>

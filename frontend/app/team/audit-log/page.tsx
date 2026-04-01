@@ -24,7 +24,7 @@ export default function TeamAuditLogPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pb-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Audit Logs</h1>
         <p className="text-sm text-muted-foreground mt-1">Immutable history of team mutation streams</p>

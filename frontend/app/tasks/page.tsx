@@ -380,7 +380,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="flex-1 min-h-0 overflow-y-auto space-y-6 flex flex-col pb-8">
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="flex items-center justify-between">
         <div className="animate-in fade-in slide-in-from-left-4 duration-500">
