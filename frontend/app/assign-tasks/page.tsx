@@ -51,6 +51,9 @@ export default function AssignTasksPage() {
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<any | null>(null);
   
   // Toast State
   const [toasts, setToasts] = useState<any[]>([]);
@@ -154,6 +157,7 @@ export default function AssignTasksPage() {
   const onSaveTask: SubmitHandler<TaskFormValues> = async (data) => {
     try {
       if (data.isRecurring) {
+        // ... (existing recurring logic)
         const payload = {
           title: data.title,
           description: data.description,
@@ -174,22 +178,65 @@ export default function AssignTasksPage() {
 
         await api.post('/tasks/recurring', payload);
       } else {
-        await api.post('/tasks', {
-          title: data.title,
-          description: data.description,
-          priority: data.priority,
-          assigneeId: data.assigneeId,
-          dueDate: data.dueDate || null,
-          status: 'TODO'
-        });
+        if (editingTask) {
+          await api.put(`/tasks/${editingTask.id}`, {
+            title: data.title,
+            description: data.description,
+            priority: data.priority,
+            assigneeId: data.assigneeId,
+            dueDate: data.dueDate || null,
+          });
+        } else {
+          await api.post('/tasks', {
+            title: data.title,
+            description: data.description,
+            priority: data.priority,
+            assigneeId: data.assigneeId,
+            dueDate: data.dueDate || null,
+            status: 'TODO'
+          });
+        }
       }
-      addToast('Task assigned successfully!', 'success');
+      addToast(editingTask ? 'Task updated successfully!' : 'Task assigned successfully!', 'success');
       setIsModalOpen(false);
+      setEditingTask(null);
       reset();
       fetchTeamSummary();
       if (selectedMember) fetchMemberTasks(selectedMember.id);
     } catch (err: any) {
-      addToast(err.message || 'Failed to assign task.', 'error');
+      addToast(err.message || 'Failed to save task.', 'error');
+    }
+  };
+
+  const handleEditTask = (task: any) => {
+    setEditingTask(task);
+    reset({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority,
+      assigneeId: task.assigneeId,
+      dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+      isRecurring: false,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteTask = (task: any) => {
+    setTaskToDelete(task);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const onConfirmDelete = async () => {
+    if (!taskToDelete) return;
+    try {
+      await api.delete(`/tasks/${taskToDelete.id}`);
+      addToast('Task deleted successfully!', 'success');
+      setIsDeleteDialogOpen(false);
+      setTaskToDelete(null);
+      fetchTeamSummary();
+      if (selectedMember) fetchMemberTasks(selectedMember.id);
+    } catch (err: any) {
+      addToast(err.message || 'Failed to delete task.', 'error');
     }
   };
 
@@ -219,6 +266,7 @@ export default function AssignTasksPage() {
         </div>
         <button 
           onClick={() => {
+            setEditingTask(null);
             reset({ assigneeId: selectedMember?.id || '' });
             setIsModalOpen(true);
           }}
@@ -318,11 +366,31 @@ export default function AssignTasksPage() {
                         <div key={task.id} className="bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow relative group">
                            <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sm text-foreground pr-6">{task.title}</h4>
-                              <div className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                 task.priority === 'HIGH' ? 'bg-red-100 text-red-600' : 
-                                 task.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'
-                              }`}>
-                                 {task.priority}
+                              <div className="flex items-center gap-2">
+                                <div className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                  task.priority === 'HIGH' ? 'bg-red-100 text-red-600' : 
+                                  task.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'
+                                }`}>
+                                  {task.priority}
+                                </div>
+                                {task.creatorId === user?.userId && (
+                                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                      onClick={() => handleEditTask(task)}
+                                      className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                                      title="Edit Task"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteTask(task)}
+                                      className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
+                                      title="Delete Task"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                            </div>
                            <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3 leading-relaxed">{task.description || 'No description provided.'}</p>
@@ -351,8 +419,8 @@ export default function AssignTasksPage() {
          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-card w-full max-w-md p-6 rounded-2xl border border-border shadow-2xl space-y-4">
                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-foreground">Assign Team Task</h2>
-                  <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <h2 className="text-lg font-bold text-foreground">{editingTask ? 'Edit Task' : 'Assign Team Task'}</h2>
+                  <button onClick={() => { setIsModalOpen(false); setEditingTask(null); }} className="text-muted-foreground hover:text-foreground">
                     <Inbox className="h-5 w-5" />
                   </button>
                </div>
@@ -492,13 +560,24 @@ export default function AssignTasksPage() {
                     </>
                   )}
                   <div className="pt-4 flex gap-3">
-                     <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted font-bold text-sm transition-colors uppercase tracking-widest">Cancel</button>
-                     <button type="submit" className="flex-1 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all uppercase tracking-widest">Assign Task</button>
+                     <button type="button" onClick={() => { setIsModalOpen(false); setEditingTask(null); }} className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted font-bold text-sm transition-colors uppercase tracking-widest">Cancel</button>
+                     <button type="submit" className="flex-1 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all uppercase tracking-widest">
+                       {editingTask ? 'Update Task' : 'Assign Task'}
+                     </button>
                   </div>
                </form>
             </div>
          </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isDeleteDialogOpen}
+        onCancel={() => setIsDeleteDialogOpen(false)}
+        onConfirm={onConfirmDelete}
+        title="Delete Task"
+        message="Are you sure you want to delete this task? This action cannot be undone."
+      />
     </div>
   );
 }
