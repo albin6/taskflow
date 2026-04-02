@@ -214,7 +214,7 @@ export default function AssignTasksPage() {
       title: task.title,
       description: task.description || '',
       priority: task.priority,
-      assigneeId: task.assigneeId,
+      assigneeId: task.assignee?.id || task.assigneeId || '',
       dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
       isRecurring: false,
     });
