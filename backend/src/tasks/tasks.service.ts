@@ -42,8 +42,8 @@ export class TasksService {
 
        // Hierarchy Check: Cannot assign to higher hierarchy levels (lower number)
        const assigneeLevel = assignee.role?.level ?? 99;
-       if (assigneeLevel < actor.level) {
-          throw new ForbiddenException('Cannot assign tasks to members with a higher role level.');
+       if (assigneeLevel <= actor.level && actor.level !== 0) {
+          throw new ForbiddenException('Cannot assign tasks to members with the same or higher role level.');
        }
     }
 
@@ -183,8 +183,8 @@ export class TasksService {
 
           // Hierarchy Check
           const assigneeLevel = assignee.role?.level ?? 99;
-          if (assigneeLevel < actor.level) {
-             throw new ForbiddenException('Cannot assign tasks to members with a higher role level.');
+          if (assigneeLevel <= actor.level && actor.level !== 0) {
+             throw new ForbiddenException('Cannot assign tasks to members with the same or higher role level.');
           }
 
           task.assignee = assignee;

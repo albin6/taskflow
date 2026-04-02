@@ -607,7 +607,12 @@ export default function TasksPage() {
                           </div>
                         </div>
                         <div className="max-h-32 overflow-y-auto space-y-1.5 p-2 border border-primary/10 rounded-xl bg-background/50 custom-scrollbar">
-                           {members.map(m => (
+                           {members.filter(m => {
+                               const memberLevel = m.role?.level ?? 99;
+                               const actorLevel = user?.level ?? 99;
+                               if (actorLevel === 0) return true;
+                               return memberLevel > actorLevel;
+                           }).map(m => (
                              <label key={m.id} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedAssigneeIds.includes(m.id) ? 'bg-primary/10' : 'hover:bg-muted'}`}>
                                <input 
                                  type="checkbox" 
@@ -648,7 +653,7 @@ export default function TasksPage() {
                                    const memberLevel = m.role?.level ?? 99;
                                    const actorLevel = user?.level ?? 99;
                                    if (actorLevel === 0) return true;
-                                   return memberLevel >= actorLevel;
+                                   return memberLevel > actorLevel;
                                }).map(m => (
                                    <option key={m.id} value={m.id}>{m.name}</option>
                                ))}

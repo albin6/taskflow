@@ -33,19 +33,51 @@ export class RecurringTasksService {
     const assignees = await this.userRepository.findByIds(assigneeIds);
     if (assignees.length === 0) throw new NotFoundException('No valid assignees found');
 
-    const startDate = new Date(dto.startDate);
-    const nextRunDate = this.calculateNextRunDate(startDate, dto.frequency, dto.daysOfWeek || []);
+    // Hierarchy Check: Creator cannot assign to peers or superiors
+    if (actor.level !== 0) {
+      for (const assignee of assignees) {
+        const assigneeLevel = assignee.role?.level ?? 99;
+        if (assigneeLevel <= actor.level) {
+          throw new ForbiddenException(`Cannot assign recurring tasks to peer or superior: ${assignee.name}`);
+        }
+      }
+    }
 
+    const now = new Date();
+    const startDate = new Date(dto.startDate);
+    startDate.setHours(0, 0, 0, 0); // Normalize to midnight
+    
+    // Initializing object
     const recurringTask = this.recurringTaskRepository.create({
       ...rest,
       startDate,
-      nextRunDate,
       creator: { id: actor.userId } as any,
       team,
       assignees,
+      isActive: true,
     });
 
-    return this.recurringTaskRepository.save(recurringTask);
+    // Immediate Execution Check: If startDate is today or past, generate first set now
+    if (startDate <= now) {
+      // We set nextRunDate to startDate initially for the generator to know the context (mostly due date)
+      recurringTask.nextRunDate = startDate; 
+      
+      // Save it first to ensure we have an ID for relations if needed
+      const savedRT = await this.recurringTaskRepository.save(recurringTask);
+      
+      // Generate the first instance immediately
+      await this.generateTaskInstances(savedRT);
+      
+      // Move to the next interval
+      savedRT.lastRunDate = now;
+      savedRT.nextRunDate = this.calculateNextRunDate(startDate, dto.frequency, dto.daysOfWeek || []);
+      
+      return this.recurringTaskRepository.save(savedRT);
+    } else {
+      // Future start: Just set the first run to the startDate
+      recurringTask.nextRunDate = startDate;
+      return this.recurringTaskRepository.save(recurringTask);
+    }
   }
 
   async findAll(actor: any): Promise<RecurringTask[]> {
