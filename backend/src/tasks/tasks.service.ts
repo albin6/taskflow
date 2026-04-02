@@ -40,10 +40,10 @@ export class TasksService {
           throw new ConflictException('Assignee must belong to the same team.');
        }
 
-       // Hierarchy Check: Cannot assign to higher hierarchy levels (lower number)
+       // Hierarchy Check: Cannot assign to SUPERIORS (lower number)
        const assigneeLevel = assignee.role?.level ?? 99;
-       if (assigneeLevel <= actor.level && actor.level !== 0) {
-          throw new ForbiddenException('Cannot assign tasks to members with the same or higher role level.');
+       if (assigneeLevel < actor.level && actor.level !== 0) {
+          throw new ForbiddenException('Cannot assign tasks to members with a higher role level (Superiors).');
        }
     }
 
@@ -62,7 +62,7 @@ export class TasksService {
     return this.taskRepository.save(task);
   }
 
-  async findAll(actor: any, page = 1, limit = 20): Promise<{ tasks: Task[], total: number }> {
+  async findAll(actor: any, page = 1, limit = 20, filterByAssigneeId?: string, filterByCreatorId?: string): Promise<{ tasks: Task[], total: number }> {
     const skip = (page - 1) * limit;
     
     const query = this.taskRepository
@@ -82,11 +82,20 @@ export class TasksService {
       .orderBy('task.createdAt', 'DESC');
 
     if (actor.level !== 0 && actor.teamId) {
-       // All users (Heads, Leads, Members) only see tasks they created or are assigned to
-       query.where('team.id = :teamId AND (creator.id = :userId OR assignee.id = :userId)', { 
-           teamId: actor.teamId, 
+       query.andWhere('team.id = :teamId', { teamId: actor.teamId });
+       
+       // Standard visibility: Creator or Assignee
+       query.andWhere('(creator.id = :userId OR assignee.id = :userId)', { 
            userId: actor.userId 
        });
+    }
+
+    if (filterByAssigneeId) {
+       query.andWhere('assignee.id = :filterByAssigneeId', { filterByAssigneeId });
+    }
+
+    if (filterByCreatorId) {
+       query.andWhere('creator.id = :filterByCreatorId', { filterByCreatorId });
     }
 
     query.andWhere('task.status != :approved', { approved: 'APPROVED' });
@@ -130,7 +139,7 @@ export class TasksService {
       throw new ForbiddenException('You can only update tasks you created or are assigned to.');
     }
 
-    // Role Restriction: Metadata (Title/Desc/Priority/Assignee/Deadline) can only be edited by the creator.
+    // Role Restriction: Metadata can only be edited by the creator.
     const isMetadataChanged = updateTaskDto.title || updateTaskDto.description !== undefined || updateTaskDto.priority || updateTaskDto.dueDate !== undefined || updateTaskDto.assigneeId !== undefined;
     if (actor.level !== 0 && isMetadataChanged && !isOwner) {
       throw new ForbiddenException('Only the task creator can edit task details.');
@@ -183,8 +192,8 @@ export class TasksService {
 
           // Hierarchy Check
           const assigneeLevel = assignee.role?.level ?? 99;
-          if (assigneeLevel <= actor.level && actor.level !== 0) {
-             throw new ForbiddenException('Cannot assign tasks to members with the same or higher role level.');
+          if (assigneeLevel < actor.level && actor.level !== 0) {
+             throw new ForbiddenException('Cannot assign tasks to members with a higher role level (Superiors).');
           }
 
           task.assignee = assignee;
@@ -261,5 +270,37 @@ export class TasksService {
 
     task.status = 'IN_PROGRESS' as any;
     return this.taskRepository.save(task);
+  }
+
+  async getTeamTaskSummary(actor: any): Promise<any[]> {
+    if (!actor.teamId) return [];
+
+    const members = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role')
+      .where('user.teamId = :teamId', { teamId: actor.teamId })
+      .andWhere('user.id != :actorId', { actorId: actor.userId })
+      .andWhere('role.level >= :actorLevel', { actorLevel: actor.level }) // Include same level (Peers) and lower (Subordinates)
+      .select(['user.id', 'user.name', 'role.name', 'role.level'])
+      .getMany();
+
+    const tasks = await this.taskRepository
+      .createQueryBuilder('task')
+      .leftJoin('task.assignee', 'assignee')
+      .where('task.teamId = :teamId', { teamId: actor.teamId })
+      .andWhere('task.status IN (:...statuses)', { statuses: ['TODO', 'IN_PROGRESS'] })
+      .select(['task.id', 'assignee.id'])
+      .getMany();
+
+    return members.map(member => {
+      const activeTasks = tasks.filter(t => t.assignee?.id === member.id).length;
+      return {
+        id: member.id,
+        name: member.name,
+        role: member.role?.name || 'No Role',
+        level: member.role?.level || 99,
+        todoCount: activeTasks, // Simplified for now as TODO + IN_PROGRESS count
+      };
+    });
   }
 }

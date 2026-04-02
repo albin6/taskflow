@@ -146,7 +146,7 @@ export default function TasksPage() {
     else setLoadingMore(true);
     
     try {
-      const res = await api.get(`/tasks?page=${pageNum}&limit=20`);
+      const res = await api.get(`/tasks?page=${pageNum}&limit=20&assigneeId=${user?.userId}`);
       const { tasks: newTasks, total: totalCount } = res.data;
       
       setTasks(prev => isInitial ? newTasks : [...prev, ...newTasks]);
@@ -221,8 +221,8 @@ export default function TasksPage() {
         title: '',
         description: '',
         priority: 'MEDIUM',
-        assigneeId: '',
-        assigneeIds: [],
+        assigneeId: user?.userId || '',
+        assigneeIds: [user?.userId || ''],
         dueDate: '',
         isRecurring: false,
         frequency: 'DAILY',
@@ -403,8 +403,8 @@ export default function TasksPage() {
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="flex items-center justify-between">
         <div className="animate-in fade-in slide-in-from-left-4 duration-500">
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">Task Board</h1>
-          <p className="text-sm text-muted-foreground mt-1 font-medium italic">Coordinate and track work streams with precision</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">My Tasks</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium italic">Track and complete your personal work streams</p>
         </div>
         {canCreate && (
           <button 
@@ -585,46 +585,10 @@ export default function TasksPage() {
                         </div>
                       )}
 
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <label className="block text-xs font-bold text-primary uppercase tracking-widest flex-1">Auto-Assignees</label>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              type="button" 
-                              onClick={selectAllMembers}
-                              className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-[10px] text-primary/30">|</span>
-                            <button 
-                              type="button" 
-                              onClick={unselectAllMembers}
-                              className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
-                            >
-                              Unselect All
-                            </button>
-                          </div>
+                        <div className="p-3 rounded-xl bg-background border border-primary/10 flex items-center justify-between">
+                            <span className="text-xs font-bold text-foreground">Self (Assigned to Me)</span>
+                            <CheckCircle2 className="h-4 w-4 text-primary" />
                         </div>
-                        <div className="max-h-32 overflow-y-auto space-y-1.5 p-2 border border-primary/10 rounded-xl bg-background/50 custom-scrollbar">
-                           {members.filter(m => {
-                               const memberLevel = m.role?.level ?? 99;
-                               const actorLevel = user?.level ?? 99;
-                               if (actorLevel === 0) return true;
-                               return memberLevel > actorLevel;
-                           }).map(m => (
-                             <label key={m.id} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedAssigneeIds.includes(m.id) ? 'bg-primary/10' : 'hover:bg-muted'}`}>
-                               <input 
-                                 type="checkbox" 
-                                 checked={selectedAssigneeIds.includes(m.id)}
-                                 onChange={() => toggleAssignee(m.id)}
-                                 className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
-                               />
-                               <span className="text-xs font-bold text-foreground">{m.name}</span>
-                             </label>
-                           ))}
-                        </div>
-                      </div>
                     </div>
                   ) : (
                     <>
@@ -641,24 +605,11 @@ export default function TasksPage() {
                             </select>
                          </div>
                          <div>
-                            <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Assignee</label>
-                            <select 
-                               {...register('assigneeId')}
-                               className={`w-full px-4 py-2.5 rounded-xl border bg-background text-sm transition-all font-bold ${
-                                 errors.assigneeId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border focus:ring-2 focus:ring-primary/20'
-                               }`}
-                            >
-                               <option value="" disabled>Select Assignee...</option>
-                               {members.filter(m => {
-                                   const memberLevel = m.role?.level ?? 99;
-                                   const actorLevel = user?.level ?? 99;
-                                   if (actorLevel === 0) return true;
-                                   return memberLevel > actorLevel;
-                               }).map(m => (
-                                   <option key={m.id} value={m.id}>{m.name}</option>
-                               ))}
-                            </select>
-                            <InputError message={errors.assigneeId?.message} />
+                             <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest">Assignee</label>
+                             <div className="px-4 py-2.5 rounded-xl border border-border bg-muted/30 text-sm font-bold text-foreground flex items-center justify-between">
+                               <span>Self</span>
+                               <Check className="h-4 w-4 text-primary" />
+                             </div>
                          </div>
                       </div>
                       <div>

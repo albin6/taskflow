@@ -10,6 +10,7 @@ import {
   FileText, 
   Settings, 
   CheckSquare,
+  ClipboardList,
   LogOut 
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -31,6 +32,12 @@ export default function Sidebar() {
       label: 'Tasks',
       icon: CheckSquare,
       href: '/tasks',
+      visible: user.level !== 0,
+    },
+    {
+      label: 'Assign Task',
+      icon: ClipboardList,
+      href: '/assign-tasks',
       visible: user.level !== 0,
     },
     {

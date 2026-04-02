@@ -23,9 +23,16 @@ export class TasksController {
     @Req() req: any,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 20,
+    @Query('assigneeId') assigneeId?: string,
+    @Query('creatorId') creatorId?: string,
   ) {
     // Standard authenticated users can view tasks (within their team scope filter managed in service)
-    return this.tasksService.findAll(req.user, +page, +limit);
+    return this.tasksService.findAll(req.user, +page, +limit, assigneeId, creatorId);
+  }
+
+  @Get('team-summary')
+  getTeamTaskSummary(@Req() req: any) {
+    return this.tasksService.getTeamTaskSummary(req.user);
   }
 
   @Get(':id')
