@@ -9,7 +9,7 @@ import { Permissions } from '../common/constants/permissions';
 @Controller('tasks')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(private readonly tasksService: TasksService) { }
 
   @Post()
   @RequirePermissions(Permissions.CREATE_TASK)

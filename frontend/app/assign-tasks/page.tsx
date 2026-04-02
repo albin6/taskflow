@@ -251,7 +251,8 @@ export default function AssignTasksPage() {
     const task = memberTasks.find(t => t.id === taskId);
     if (!task) return;
 
-    if (task.creatorId !== user?.userId) {
+    const isOwner = task.creator?.id === user?.userId || task.creatorId === user?.userId;
+    if (!isOwner) {
        addToast('Access Denied: Only the creator can move this task.', 'error');
        return;
     }
