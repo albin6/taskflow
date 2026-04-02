@@ -124,15 +124,15 @@ export default function AssignTasksPage() {
     fetchTeamSummary();
   }, []);
 
-  const fetchTeamSummary = async () => {
-    setLoading(true);
+  const fetchTeamSummary = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.get('/tasks/team-summary');
       setTeamSummary(res.data);
     } catch (err) {
       console.error('Failed to fetch team summary', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -179,7 +179,7 @@ export default function AssignTasksPage() {
         await api.post('/tasks/recurring', payload);
       } else {
         if (editingTask) {
-          await api.put(`/tasks/${editingTask.id}`, {
+          await api.patch(`/tasks/${editingTask.id}`, {
             title: data.title,
             description: data.description,
             priority: data.priority,
@@ -201,7 +201,7 @@ export default function AssignTasksPage() {
       setIsModalOpen(false);
       setEditingTask(null);
       reset();
-      fetchTeamSummary();
+      fetchTeamSummary(true);
       if (selectedMember) fetchMemberTasks(selectedMember.id);
     } catch (err: any) {
       addToast(err.message || 'Failed to save task.', 'error');
@@ -233,7 +233,7 @@ export default function AssignTasksPage() {
       addToast('Task deleted successfully!', 'success');
       setIsDeleteDialogOpen(false);
       setTaskToDelete(null);
-      fetchTeamSummary();
+      fetchTeamSummary(true);
       if (selectedMember) fetchMemberTasks(selectedMember.id);
     } catch (err: any) {
       addToast(err.message || 'Failed to delete task.', 'error');
@@ -261,7 +261,7 @@ export default function AssignTasksPage() {
       await api.patch(`/tasks/${taskId}`, { status: targetStatus });
       addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
       setMemberTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
-      fetchTeamSummary(); // Update active counts
+      fetchTeamSummary(true); // Update active counts silently
     } catch (err: any) {
       const status = err.status;
       if (status === 409) {
