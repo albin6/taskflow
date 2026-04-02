@@ -136,8 +136,8 @@ export default function AssignTasksPage() {
     }
   };
 
-  const fetchMemberTasks = async (memberId: string) => {
-    setTasksLoading(true);
+  const fetchMemberTasks = async (memberId: string, silent = false) => {
+    if (!silent) setTasksLoading(true);
     try {
       // Fetch tasks WHERE creator = me AND assignee = member
       const res = await api.get(`/tasks?creatorId=${user?.userId}&assigneeId=${memberId}`);
@@ -145,7 +145,7 @@ export default function AssignTasksPage() {
     } catch (err) {
       console.error('Failed to fetch member tasks', err);
     } finally {
-      setTasksLoading(false);
+      if (!silent) setTasksLoading(false);
     }
   };
 
@@ -202,7 +202,7 @@ export default function AssignTasksPage() {
       setEditingTask(null);
       reset();
       fetchTeamSummary(true);
-      if (selectedMember) fetchMemberTasks(selectedMember.id);
+      if (selectedMember) fetchMemberTasks(selectedMember.id, true);
     } catch (err: any) {
       addToast(err.message || 'Failed to save task.', 'error');
     }
@@ -234,7 +234,7 @@ export default function AssignTasksPage() {
       setIsDeleteDialogOpen(false);
       setTaskToDelete(null);
       fetchTeamSummary(true);
-      if (selectedMember) fetchMemberTasks(selectedMember.id);
+      if (selectedMember) fetchMemberTasks(selectedMember.id, true);
     } catch (err: any) {
       addToast(err.message || 'Failed to delete task.', 'error');
     }
@@ -262,6 +262,7 @@ export default function AssignTasksPage() {
       addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
       setMemberTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
       fetchTeamSummary(true); // Update active counts silently
+      if (selectedMember) fetchMemberTasks(selectedMember.id, true); // Update member tasks list silently
     } catch (err: any) {
       const status = err.status;
       if (status === 409) {
@@ -602,10 +603,12 @@ export default function AssignTasksPage() {
                                <option value="MEDIUM">Medium</option>
                                <option value="HIGH">High</option>
                             </select>
+                            <InputError message={errors.priority?.message} />
                          </div>
                          <div>
                             <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest leading-none">Deadline</label>
                             <input {...register('dueDate')} type="date" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 transition-all outline-none" />
+                            <InputError message={errors.dueDate?.message} />
                          </div>
                       </div>
                     </>
