@@ -277,6 +277,33 @@ export default function AssignTasksPage() {
     e.preventDefault();
   };
 
+  const priorityColors: Record<string, string> = {
+    HIGH: 'border-l-red-500',
+    MEDIUM: 'border-l-amber-500',
+    LOW: 'border-l-green-500',
+  };
+
+  const isOverdue = (task: any) => {
+    if (!task.dueDate || task.status === 'DONE') return false;
+    return new Date(task.dueDate) < new Date();
+  };
+
+  const getInitials = (name: string) => {
+    return name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+  };
+
+  const canManageTask = (task: any): boolean => {
+    const isOwner = task.creator?.id === user?.userId || task.creatorId === user?.userId;
+    return !!(user?.level === 0 || isOwner);
+  };
+
+  const canApprove = (task: any): boolean => {
+    return false; // Leave approval to the main board or specific approval section
+  };
+
+  const handleApproveTask = (id: string) => {};
+  const handleRejectTask = (id: string) => {};
+
   const columns = [
     { id: 'TODO', label: 'To Do', icon: CheckSquare, color: 'text-blue-500' },
     { id: 'IN_PROGRESS', label: 'In Progress', icon: Clock, color: 'text-amber-500' },
@@ -405,51 +432,24 @@ export default function AssignTasksPage() {
                     </div>
                     <div className="p-3 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
                       {memberTasks.filter(t => t.status === col.id).map(task => (
-                        <div 
-                          key={task.id} 
-                          draggable={task.creatorId === user?.userId}
-                          onDragStart={(e) => handleDragStart(e, task.id)}
-                          className={`bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow relative group ${
-                             task.creatorId === user?.userId ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
-                          }`}
-                        >
-                           <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-sm text-foreground pr-6">{task.title}</h4>
-                              <div className="flex items-center gap-2">
-                                <div className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                  task.priority === 'HIGH' ? 'bg-red-100 text-red-600' : 
-                                  task.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'
-                                }`}>
-                                  {task.priority}
-                                </div>
-                                {task.creatorId === user?.userId && (
-                                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                      onClick={() => handleEditTask(task)}
-                                      className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                                      title="Edit Task"
-                                    >
-                                      <Edit3 className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button 
-                                      onClick={() => handleDeleteTask(task)}
-                                      className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
-                                      title="Delete Task"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                           </div>
-                           <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3 leading-relaxed">{task.description || 'No description provided.'}</p>
-                           <div className="flex items-center justify-between mt-auto pt-3 border-t border-border/50">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                 <Calendar className="h-3 w-3" />
-                                 <span className="text-[10px] font-medium">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No deadline'}</span>
-                              </div>
-                           </div>
-                        </div>
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          user={user}
+                          priorityColors={priorityColors}
+                          isOverdue={isOverdue}
+                          canManageTask={canManageTask}
+                          canApprove={canApprove}
+                          getInitials={getInitials}
+                          onDragStart={handleDragStart}
+                          openModal={handleEditTask}
+                          confirmDeleteTask={(id) => {
+                             const t = memberTasks.find(m => m.id === id);
+                             if (t) handleDeleteTask(t);
+                          }}
+                          handleApproveTask={handleApproveTask}
+                          handleRejectTask={handleRejectTask}
+                        />
                       ))}
                       {memberTasks.filter(t => t.status === col.id).length === 0 && (
                         <div className="py-10 text-center opacity-40 italic text-xs font-medium">Empty</div>
