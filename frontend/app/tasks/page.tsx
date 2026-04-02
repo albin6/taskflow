@@ -209,6 +209,12 @@ export default function TasksPage() {
         priority: task.priority,
         assigneeId: task.assignee?.id || '',
         dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+        isRecurring: false,
+        frequency: 'DAILY',
+        daysOfWeek: [],
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '',
+        assigneeIds: [],
       });
     } else {
       reset({
@@ -216,7 +222,13 @@ export default function TasksPage() {
         description: '',
         priority: 'MEDIUM',
         assigneeId: '',
+        assigneeIds: [],
         dueDate: '',
+        isRecurring: false,
+        frequency: 'DAILY',
+        daysOfWeek: [],
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '',
       });
     }
     setIsModalOpen(true);
@@ -225,7 +237,19 @@ export default function TasksPage() {
   const onSaveTask: SubmitHandler<TaskFormValues> = async (data) => {
     setSubmitting(true);
     try {
-      if (data.isRecurring) {
+      if (selectedTask) {
+        // Edit path: Simple update to title, description, priority, assignee, due date
+        const payload = {
+          title: data.title,
+          description: data.description || null,
+          priority: data.priority,
+          assigneeId: data.assigneeId || null,
+          dueDate: data.dueDate || null,
+        };
+        await api.patch(`/tasks/${selectedTask.id}`, payload);
+        addToast('Task updated successfully', 'success');
+      } else if (data.isRecurring) {
+        // Create Recurring path
         const payload = {
           title: data.title,
           description: data.description,
@@ -248,6 +272,7 @@ export default function TasksPage() {
         await api.post('/tasks/recurring', payload);
         addToast('Recurring task automation set up!', 'success');
       } else {
+        // Create Simple path
         const payload = {
           title: data.title,
           description: data.description,
@@ -256,14 +281,8 @@ export default function TasksPage() {
           dueDate: data.dueDate || null,
           status: 'TODO'
         };
-
-        if (selectedTask) {
-          await api.patch(`/tasks/${selectedTask.id}`, payload);
-          addToast('Task updated successfully', 'success');
-        } else {
-          await api.post('/tasks', payload);
-          addToast('New task created!', 'success');
-        }
+        await api.post('/tasks', payload);
+        addToast('New task created!', 'success');
       }
 
       setIsModalOpen(false);
