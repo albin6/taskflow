@@ -289,7 +289,8 @@ export default function AssignTasksPage() {
   };
 
   const getInitials = (name: string) => {
-    return name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+    if (!name) return '??';
+    return name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const canManageTask = (task: any): boolean => {
@@ -298,7 +299,7 @@ export default function AssignTasksPage() {
   };
 
   const canApprove = (task: any): boolean => {
-    return false; // Leave approval to the main board or specific approval section
+    return false; // Manager-side only handles assignment and status monitoring
   };
 
   const handleApproveTask = (id: string) => {};
