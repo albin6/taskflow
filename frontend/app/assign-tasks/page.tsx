@@ -301,11 +301,32 @@ export default function AssignTasksPage() {
   };
 
   const canApprove = (task: any): boolean => {
-    return false; // Manager-side only handles assignment and status monitoring
+    if (task.status !== 'DONE') return false;
+    const isOwner = task.creator?.id === user?.userId || task.creatorId === user?.userId;
+    return !!(user?.level === 0 || isOwner);
   };
 
-  const handleApproveTask = (id: string) => {};
-  const handleRejectTask = (id: string) => {};
+  const handleApproveTask = async (id: string) => {
+    try {
+      await api.patch(`/tasks/${id}/approve`);
+      addToast('Task approved successfully', 'success');
+      fetchTeamSummary(true);
+      if (selectedMember) fetchMemberTasks(selectedMember.id, true);
+    } catch (err: any) {
+      addToast(err.message || 'Failed to approve task', 'error');
+    }
+  };
+
+  const handleRejectTask = async (id: string) => {
+    try {
+      await api.patch(`/tasks/${id}/reject`);
+      addToast('Task rejected and moved back to In Progress', 'info');
+      fetchTeamSummary(true);
+      if (selectedMember) fetchMemberTasks(selectedMember.id, true);
+    } catch (err: any) {
+      addToast(err.message || 'Failed to reject task', 'error');
+    }
+  };
 
   const columns = [
     { id: 'TODO', label: 'To Do', icon: CheckSquare, color: 'text-blue-500' },
