@@ -316,6 +316,10 @@ export default function TasksPage() {
     setValue('assigneeIds', members.map(m => m.id));
   };
 
+  const unselectAllMembers = () => {
+    setValue('assigneeIds', []);
+  };
+
   const confirmDeleteTask = (taskId: string) => {
     setTaskToDelete(taskId);
     setIsConfirmModalOpen(true);
@@ -356,17 +360,13 @@ export default function TasksPage() {
 
   const canManageTask = (task: any): boolean => {
      const isOwner = task.creator?.id === user?.userId;
-     const isAssignee = task.assignee?.id === user?.userId;
-     const isManager = (user?.level !== undefined && user.level <= 2);
-     if (isAssignee && !isOwner && !isManager) return false;
-     return !!(user?.level === 0 || isOwner || isManager || canEditGeneral);
+     return !!(user?.level === 0 || isOwner);
   };
 
   const canDropTask = (task: any): boolean => {
      const isOwner = task.creator?.id === user?.userId;
      const isAssignee = task.assignee?.id === user?.userId;
-     const isManager = (user?.level !== undefined && user.level <= 2);
-     return !!(isOwner || isManager || isAssignee || canEditGeneral);
+     return !!(user?.level === 0 || isOwner || isAssignee);
   };
 
   const canApprove = (task: any): boolean => {
@@ -586,15 +586,25 @@ export default function TasksPage() {
                       )}
 
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-bold text-primary uppercase tracking-widest">Auto-Assignees</label>
-                          <button 
-                            type="button" 
-                            onClick={selectAllMembers}
-                            className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
-                          >
-                            Select All team
-                          </button>
+                        <div className="flex items-center gap-3 mb-2">
+                          <label className="block text-xs font-bold text-primary uppercase tracking-widest flex-1">Auto-Assignees</label>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              type="button" 
+                              onClick={selectAllMembers}
+                              className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-[10px] text-primary/30">|</span>
+                            <button 
+                              type="button" 
+                              onClick={unselectAllMembers}
+                              className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight"
+                            >
+                              Unselect All
+                            </button>
+                          </div>
                         </div>
                         <div className="max-h-32 overflow-y-auto space-y-1.5 p-2 border border-primary/10 rounded-xl bg-background/50 custom-scrollbar">
                            {members.map(m => (

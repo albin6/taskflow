@@ -82,16 +82,11 @@ export class TasksService {
       .orderBy('task.createdAt', 'DESC');
 
     if (actor.level !== 0 && actor.teamId) {
-      if (actor.level <= 2) {
-         // Managers (Heads, Leads) see all team tasks
-         query.where('team.id = :teamId', { teamId: actor.teamId });
-      } else {
-         // Base roles (Executives, etc) only see tasks they created or are assigned to
-         query.where('team.id = :teamId AND (creator.id = :userId OR assignee.id = :userId)', { 
-             teamId: actor.teamId, 
-             userId: actor.userId 
-         });
-      }
+       // All users (Heads, Leads, Members) only see tasks they created or are assigned to
+       query.where('team.id = :teamId AND (creator.id = :userId OR assignee.id = :userId)', { 
+           teamId: actor.teamId, 
+           userId: actor.userId 
+       });
     }
 
     query.andWhere('task.status != :approved', { approved: 'APPROVED' });
@@ -132,11 +127,17 @@ export class TasksService {
     const isAssignee = task.assignee?.id === actor.userId;
 
     if (actor.level !== 0 && !isOwner && !hasPermission && !isManager && !isAssignee) {
-      throw new ForbiddenException('You can only update tasks you created, managed, or assigned to.');
+      throw new ForbiddenException('You can only update tasks you created or are assigned to.');
     }
 
-    // Assignee Restriction: Assignees who aren't owners or managers can ONLY update status
-    if (isAssignee && !isOwner && !isManager) {
+    // Role Restriction: Metadata (Title/Desc/Priority/Assignee/Deadline) can only be edited by the creator.
+    const isMetadataChanged = updateTaskDto.title || updateTaskDto.description !== undefined || updateTaskDto.priority || updateTaskDto.dueDate !== undefined || updateTaskDto.assigneeId !== undefined;
+    if (actor.level !== 0 && isMetadataChanged && !isOwner) {
+      throw new ForbiddenException('Only the task creator can edit task details.');
+    }
+
+    // Assignee Restriction: Assignees who aren't owners can ONLY update status (implied by previous rule, but explicit here for safety)
+    if (isAssignee && !isOwner) {
       const updateKeys = Object.keys(updateTaskDto).filter(k => updateTaskDto[k as keyof typeof updateTaskDto] !== undefined);
       if (updateKeys.some(k => k !== 'status')) {
         throw new ForbiddenException('Assignees can only update task status.');
@@ -201,11 +202,9 @@ export class TasksService {
     }
 
     const isOwner = task.creator?.id === actor.userId;
-    const hasPermission = actor.permissions?.includes(Permissions.DELETE_TASK);
-    const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
 
-    if (actor.level !== 0 && !isOwner && !hasPermission && !isManager) {
-      throw new ForbiddenException('You can only delete tasks you created or if you are a manager.');
+    if (actor.level !== 0 && !isOwner) {
+      throw new ForbiddenException('Only the task creator can delete this task.');
     }
 
     await this.taskRepository.remove(task);
