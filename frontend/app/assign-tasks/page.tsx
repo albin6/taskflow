@@ -240,6 +240,43 @@ export default function AssignTasksPage() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('taskId', taskId);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
+    const taskId = e.dataTransfer.getData('taskId');
+    if (!taskId) return;
+
+    const task = memberTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (task.creatorId !== user?.userId) {
+       addToast('Access Denied: Only the creator can move this task.', 'error');
+       return;
+    }
+
+    try {
+      await api.patch(`/tasks/${taskId}`, { status: targetStatus });
+      addToast(`Task moved to ${targetStatus.replace('_', ' ')}`, 'success');
+      setMemberTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t));
+      fetchTeamSummary(); // Update active counts
+    } catch (err: any) {
+      const status = err.status;
+      if (status === 409) {
+        addToast('Impossible Move: Task status cannot be moved backwards manually.', 'error');
+      } else if (status === 403) {
+        addToast('Access Denied: Only the creator or assignee can update status.', 'error');
+      } else {
+        addToast(err.message || 'Failed to update task status.', 'error');
+      }
+    }
+  };
+
+  const allowDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
   const columns = [
     { id: 'TODO', label: 'To Do', icon: CheckSquare, color: 'text-blue-500' },
     { id: 'IN_PROGRESS', label: 'In Progress', icon: Clock, color: 'text-amber-500' },
@@ -351,7 +388,12 @@ export default function AssignTasksPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 h-full max-h-[calc(100vh-250px)] overflow-hidden pb-4">
                 {columns.map((col) => (
-                  <div key={col.id} className="flex flex-col bg-muted/40 rounded-2xl border border-border/40 h-full overflow-hidden">
+                  <div 
+                    key={col.id} 
+                    className="flex flex-col bg-muted/40 rounded-2xl border border-border/40 h-full overflow-hidden"
+                    onDragOver={allowDrop}
+                    onDrop={(e) => handleDrop(e, col.id)}
+                  >
                     <div className="p-4 border-b border-border/30 bg-muted/40 backdrop-blur-md flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <col.icon className={`h-4 w-4 ${col.color}`} />
@@ -363,7 +405,14 @@ export default function AssignTasksPage() {
                     </div>
                     <div className="p-3 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
                       {memberTasks.filter(t => t.status === col.id).map(task => (
-                        <div key={task.id} className="bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow relative group">
+                        <div 
+                          key={task.id} 
+                          draggable={task.creatorId === user?.userId}
+                          onDragStart={(e) => handleDragStart(e, task.id)}
+                          className={`bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow relative group ${
+                             task.creatorId === user?.userId ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+                          }`}
+                        >
                            <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sm text-foreground pr-6">{task.title}</h4>
                               <div className="flex items-center gap-2">
