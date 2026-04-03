@@ -81,21 +81,31 @@ export class TasksService {
       ])
       .orderBy('task.createdAt', 'DESC');
 
-    if (actor.level !== 0 && actor.teamId) {
-       query.andWhere('team.id = :teamId', { teamId: actor.teamId });
-       
-       // Standard visibility: Creator or Assignee
-       query.andWhere('(creator.id = :userId OR assignee.id = :userId)', { 
-           userId: actor.userId 
-       });
+    if (actor.level !== 0) {
+      // Non-Admin: MUST have a team to see any tasks
+      if (!actor.teamId) {
+        return { tasks: [], total: 0 };
+      }
+
+      // Restrict to their own team
+      query.andWhere('team.id = :teamId', { teamId: actor.teamId });
+
+      // Role-Based Detail Visibility
+      // Executive (Level 3+) sees only tasks they part of
+      if (actor.level > 2) {
+        query.andWhere('(creator.id = :userId OR assignee.id = :userId)', {
+          userId: actor.userId
+        });
+      }
+      // Manager/Head (Level 1-2) can see ALL tasks in their team
     }
 
     if (filterByAssigneeId) {
-       query.andWhere('assignee.id = :filterByAssigneeId', { filterByAssigneeId });
+      query.andWhere('assignee.id = :filterByAssigneeId', { filterByAssigneeId });
     }
 
     if (filterByCreatorId) {
-       query.andWhere('creator.id = :filterByCreatorId', { filterByCreatorId });
+      query.andWhere('creator.id = :filterByCreatorId', { filterByCreatorId });
     }
 
     query.andWhere('task.status != :approved', { approved: 'APPROVED' });
