@@ -21,12 +21,12 @@ export class UsersController {
   @Get()
   @RequirePermissions(Permissions.MANAGE_USERS)
   findAll(@Req() req: any) {
-    return this.usersService.findAll(req.user);
+    return this.usersService.findAll(req.user, false);
   }
 
   @Get('roster')
   findRoster(@Req() req: any) {
-    return this.usersService.findAll(req.user);
+    return this.usersService.findAll(req.user, true);
   }
 
   @Get(':id')

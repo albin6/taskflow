@@ -57,7 +57,7 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  async findAll(actor: any): Promise<User[]> {
+  async findAll(actor: any, filterActiveOnly: boolean = false): Promise<User[]> {
     const query = this.userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.team', 'team')
@@ -71,6 +71,10 @@ export class UsersService {
     // Admin level 0 views ALL. Level 1+ views absolute team scopes.
     if (actor.level !== 0 && actor.teamId) {
       query.where('team.id = :teamId', { teamId: actor.teamId });
+    }
+
+    if (filterActiveOnly) {
+       query.andWhere('user.status = :status', { status: UserStatus.ACTIVE });
     }
 
     return query.getMany();

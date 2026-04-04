@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -7,7 +7,8 @@ import { Task } from './entities/task.entity';
 import { User } from '../users/entities/user.entity';
 import { Team } from '../teams/entities/team.entity';
 import { CreateRecurringTaskDto, UpdateRecurringTaskDto } from './dto/recurring-task.dto';
-import { RecurrenceFrequency, TaskStatus } from '../common/enums';
+import { RecurrenceFrequency, TaskStatus, UserStatus } from '../common/enums';
+import { In } from 'typeorm';
 
 @Injectable()
 export class RecurringTasksService {
@@ -30,12 +31,20 @@ export class RecurringTasksService {
     const team = await this.teamRepository.findOne({ where: { id: actor.teamId } });
     if (!team) throw new NotFoundException('Team not found');
 
-    const assignees = await this.userRepository.findByIds(assigneeIds);
+    const assignees = await this.userRepository.find({
+      where: { id: In(assigneeIds) },
+      relations: ['role']
+    });
     if (assignees.length === 0) throw new NotFoundException('No valid assignees found');
 
-    // Hierarchy Check: Creator cannot assign to peers or superiors
-    if (actor.level !== 0) {
-      for (const assignee of assignees) {
+    for (const assignee of assignees) {
+      // Status Check: Cannot assign to PENDING users
+      if (assignee.status !== UserStatus.ACTIVE) {
+        throw new ConflictException(`Cannot assign tasks to members who are not approved/active: ${assignee.name}`);
+      }
+
+      // Hierarchy Check: Cannot assign to peers or superiors
+      if (actor.level !== 0) {
         const assigneeLevel = assignee.role?.level ?? 99;
         if (assigneeLevel <= actor.level) {
           throw new ForbiddenException(`Cannot assign recurring tasks to peer or superior: ${assignee.name}`);
@@ -81,19 +90,32 @@ export class RecurringTasksService {
   }
 
   async findAll(actor: any): Promise<RecurringTask[]> {
-    return this.recurringTaskRepository.find({
-      where: { team: { id: actor.teamId } },
-      relations: ['assignees', 'creator'],
-    });
+    const query = this.recurringTaskRepository.createQueryBuilder('rt')
+      .leftJoinAndSelect('rt.assignees', 'assignee')
+      .leftJoinAndSelect('rt.creator', 'creator')
+      .leftJoinAndSelect('rt.team', 'team')
+      .where('team.id = :teamId', { teamId: actor.teamId });
+
+    if (actor.level !== 0 && actor.level > 2) {
+      query.andWhere('(creator.id = :userId OR assignee.id = :userId)', {
+        userId: actor.userId
+      });
+    }
+
+    return query.getMany();
   }
 
   async remove(id: string, actor: any): Promise<void> {
     const task = await this.recurringTaskRepository.findOne({ 
       where: { id }, 
-      relations: ['team'] 
+      relations: ['team', 'creator'] 
     });
-    if (!task) throw new NotFoundException();
-    if (actor.level !== 0 && task.team.id !== actor.teamId) throw new ForbiddenException();
+    if (!task) throw new NotFoundException('Recurring task not found');
+    
+    if (actor.level !== 0) {
+      if (task.team.id !== actor.teamId) throw new ForbiddenException('Task is outside your team');
+      if (task.creator?.id !== actor.userId) throw new ForbiddenException('Only the creator can delete this recurring task');
+    }
 
     await this.recurringTaskRepository.remove(task);
   }

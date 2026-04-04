@@ -6,6 +6,7 @@ import { User } from '../users/entities/user.entity';
 import { Team } from '../teams/entities/team.entity';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { Permissions } from '../common/constants/permissions';
+import { UserStatus } from '../common/enums/index';
 
 @Injectable()
 export class TasksService {
@@ -44,6 +45,11 @@ export class TasksService {
        const assigneeLevel = assignee.role?.level ?? 99;
        if (assigneeLevel < actor.level && actor.level !== 0) {
           throw new ForbiddenException('Cannot assign tasks to members with a higher role level (Superiors).');
+       }
+
+       // Status Check: Cannot assign to PENDING/REJECTED/SUSPENDED users
+       if (assignee.status !== UserStatus.ACTIVE) {
+          throw new ConflictException('Cannot assign tasks to members who are not approved/active.');
        }
     }
 
@@ -118,7 +124,7 @@ export class TasksService {
     return { tasks, total };
   }
 
-  async findOne(id: string): Promise<Task> {
+  async findOne(id: string, actor: any): Promise<Task> {
     const task = await this.taskRepository.findOne({
       where: { id },
       relations: ['assignee', 'assigner', 'creator', 'creator.role', 'team'],
@@ -128,11 +134,26 @@ export class TasksService {
       throw new NotFoundException(`Task with ID "${id}" not found.`);
     }
 
+    if (actor.level !== 0) {
+      // Must be same team
+      if (task.team?.id !== actor.teamId) {
+        throw new ForbiddenException('You cannot access tasks outside your team.');
+      }
+
+      // If Executive, must be involved
+      if (actor.level > 2) {
+        const isInvolved = task.creator?.id === actor.userId || task.assignee?.id === actor.userId;
+        if (!isInvolved) {
+          throw new ForbiddenException('You do not have permission to view this task.');
+        }
+      }
+    }
+
     return task;
   }
 
   async update(id: string, updateTaskDto: UpdateTaskDto, actor: any): Promise<Task> {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
 
     // Validate Team Scope (Actor cannot edit other team's tasks unless level 0)
     if (actor.level !== 0 && task.team?.id !== actor.teamId) {
@@ -194,27 +215,37 @@ export class TasksService {
           task.assignee = null;
           task.assigner = null;
       } else {
-          const assignee = await this.userRepository.findOne({ where: { id: updateTaskDto.assigneeId }, relations: ['role', 'team'] });
-          if (!assignee) throw new NotFoundException(`Assignee with ID "${updateTaskDto.assigneeId}" not found.`);
-          if (assignee.team?.id !== task.team?.id) {
-             throw new ConflictException('Assignee must belong to the same team.');
-          }
+        const assignee = await this.userRepository.findOne({ 
+          where: { id: updateTaskDto.assigneeId }, 
+          relations: ['role', 'team'] 
+        });
+        if (!assignee) throw new NotFoundException('Assignee not found');
+        
+        // Safety: ensure same team
+        if (assignee.team?.id !== task.team?.id) {
+           throw new ConflictException('New assignee must belong to the same team.');
+        }
 
-          // Hierarchy Check
-          const assigneeLevel = assignee.role?.level ?? 99;
-          if (assigneeLevel < actor.level && actor.level !== 0) {
-             throw new ForbiddenException('Cannot assign tasks to members with a higher role level (Superiors).');
-          }
+        // Hierarchy Check
+        const assigneeLevel = assignee.role?.level ?? 99;
+        if (assigneeLevel < actor.level && actor.level !== 0) {
+           throw new ForbiddenException('Cannot assign tasks to superiors.');
+        }
 
-          task.assignee = assignee;
-          task.assigner = { id: actor.userId } as any; // Record new assigner
+        // Status Check: Cannot assign to PENDING users
+        if (assignee.status !== UserStatus.ACTIVE) {
+           throw new ConflictException('Cannot assign tasks to members who are not approved/active.');
+        }
+
+        task.assignee = assignee;
+        task.assigner = { id: actor.userId } as any;
       }
     }
     return this.taskRepository.save(task);
   }
 
   async remove(id: string, actor: any): Promise<{ message: string }> {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
 
     if (actor.level !== 0 && task.team?.id !== actor.teamId) {
       throw new ForbiddenException('You cannot delete tasks outside your team.');
@@ -231,7 +262,7 @@ export class TasksService {
   }
 
   async approve(id: string, actor: any) {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
     const isAssigner = task.assigner?.id === actor.userId;
     const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
 
@@ -257,7 +288,7 @@ export class TasksService {
   }
 
   async reject(id: string, actor: any) {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
     const isAssigner = task.assigner?.id === actor.userId;
     const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
 
@@ -291,6 +322,7 @@ export class TasksService {
       .where('user.teamId = :teamId', { teamId: actor.teamId })
       .andWhere('user.id != :actorId', { actorId: actor.userId })
       .andWhere('role.level >= :actorLevel', { actorLevel: actor.level }) // Include same level (Peers) and lower (Subordinates)
+      .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
       .select(['user.id', 'user.name', 'role.name', 'role.level'])
       .getMany();
 

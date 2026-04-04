@@ -37,8 +37,8 @@ export class TasksController {
 
   @Get(':id')
   @RequirePermissions(Permissions.VIEW_TASKS)
-  findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.tasksService.findOne(id, req.user);
   }
 
   @Patch(':id')
