@@ -13,7 +13,9 @@ import { ApprovalsModule } from './approvals/approvals.module';
 import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { AuditLog } from './audit/entities/audit-log.entity';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { TasksModule } from './tasks/tasks.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -78,10 +80,15 @@ import { APP_GUARD } from '@nestjs/core';
     ApprovalsModule,
     AuditModule,
     TasksModule,
+    ObservabilityModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestLoggingInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
