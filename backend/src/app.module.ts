@@ -17,10 +17,12 @@ import { TasksModule } from './tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     CacheModule.register({
       isGlobal: true,
@@ -48,6 +50,12 @@ import { APP_GUARD } from '@nestjs/core';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: true, // Only for development; set to false in production
         autoLoadEntities: true,
+        // Performance: Configure connection pooling
+        extra: {
+          max: 20, // Maximum number of connections in the pool
+          connectionTimeoutMillis: 2000, // Terminate if connection takes too long
+          idleTimeoutMillis: 10000, // Close idle connections after 10s
+        },
       }),
     }),
     TypeOrmModule.forFeature([AuditLog]),

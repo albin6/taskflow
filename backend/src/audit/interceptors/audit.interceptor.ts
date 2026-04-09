@@ -1,15 +1,12 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AuditLog } from '../entities/audit-log.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   constructor(
-    @InjectRepository(AuditLog)
-    private readonly auditLogRepository: Repository<AuditLog>,
+    private readonly eventEmitter: EventEmitter2
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -28,16 +25,13 @@ export class AuditInterceptor implements NestInterceptor {
         const safeBody = { ...body };
         if (safeBody.password) delete safeBody.password;
 
-        const log = this.auditLogRepository.create({
+        // Performance: Emit a decoupled background event instead of blocking the request thread
+        this.eventEmitter.emit('audit.log', {
           actionType: `${method} ${url}`,
           targetEntity: url,
           details: safeBody,
-          actor: { id: user.userId } as any,
-          team: user.teamId ? { id: user.teamId } as any : null,
-        });
-
-        this.auditLogRepository.save(log).catch(err => {
-          console.error('AuditInterceptor Failed to save log:', err);
+          actor: { id: user.userId },
+          team: user.teamId ? { id: user.teamId } : null,
         });
       }),
     );

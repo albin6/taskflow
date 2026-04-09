@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { OnEvent } from '@nestjs/event-emitter';
 import { AuditLog } from './entities/audit-log.entity';
 
 @Injectable()
@@ -9,6 +10,16 @@ export class AuditService {
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
   ) {}
+
+  @OnEvent('audit.log', { async: true }) // async: true ensures it runs in a separate promise chain
+  async handleAuditLog(payload: any) {
+    try {
+      const log = this.auditLogRepository.create(payload);
+      await this.auditLogRepository.save(log);
+    } catch (err) {
+      console.error('AuditService: Failed to save background log:', err);
+    }
+  }
 
   async findAll(actor: any, queryParams: any): Promise<{ data: AuditLog[], meta: any }> {
     const { action, actorId, startDate, endDate, page = 1, limit = 10 } = queryParams;

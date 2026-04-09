@@ -3,6 +3,7 @@ import { User } from '../../users/entities/user.entity';
 import { Team } from '../../teams/entities/team.entity';
 import { TaskStatus, TaskPriority } from '../../common/enums';
 
+@Index(['team', 'status'])
 @Entity('tasks')
 export class Task {
   @PrimaryGeneratedColumn('uuid')
@@ -39,6 +40,7 @@ export class Task {
   @ManyToOne(() => Team, { onDelete: 'CASCADE' })
   team: Team; // Scoped directly inside team boundaries
 
+  @Index()
   @CreateDateColumn()
   createdAt: Date;
 

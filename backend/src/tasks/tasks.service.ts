@@ -6,7 +6,7 @@ import { User } from '../users/entities/user.entity';
 import { Team } from '../teams/entities/team.entity';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { Permissions } from '../common/constants/permissions';
-import { UserStatus } from '../common/enums/index';
+import { UserStatus, TaskStatus } from '../common/enums/index';
 
 @Injectable()
 export class TasksService {
@@ -316,33 +316,37 @@ export class TasksService {
   async getTeamTaskSummary(actor: any): Promise<any[]> {
     if (!actor.teamId) return [];
 
-    const members = await this.userRepository
+    // Optimize: Use a single SQL aggregate query instead of in-memory JS loops
+    // This removes application-side bottleneck and event-loop blocking
+    const rawResults = await this.userRepository
       .createQueryBuilder('user')
-      .leftJoinAndSelect('user.role', 'role')
+      .leftJoin('user.role', 'role')
+      .leftJoin('tasks', 'task', 'task.assigneeId = user.id AND task.status IN (:...statuses)', { 
+        statuses: [TaskStatus.TODO, TaskStatus.IN_PROGRESS] 
+      })
       .where('user.teamId = :teamId', { teamId: actor.teamId })
       .andWhere('user.id != :actorId', { actorId: actor.userId })
-      .andWhere('role.level >= :actorLevel', { actorLevel: actor.level }) // Include same level (Peers) and lower (Subordinates)
+      .andWhere('role.level >= :actorLevel', { actorLevel: actor.level })
       .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
-      .select(['user.id', 'user.name', 'role.name', 'role.level'])
-      .getMany();
+      .select([
+        'user.id AS id',
+        'user.name AS name',
+        'role.name AS role',
+        'role.level AS level'
+      ])
+      .addSelect('COUNT(task.id)', 'todoCount')
+      .groupBy('user.id')
+      .addGroupBy('user.name')
+      .addGroupBy('role.name')
+      .addGroupBy('role.level')
+      .getRawMany();
 
-    const tasks = await this.taskRepository
-      .createQueryBuilder('task')
-      .leftJoin('task.assignee', 'assignee')
-      .where('task.teamId = :teamId', { teamId: actor.teamId })
-      .andWhere('task.status IN (:...statuses)', { statuses: ['TODO', 'IN_PROGRESS'] })
-      .select(['task.id', 'assignee.id'])
-      .getMany();
-
-    return members.map(member => {
-      const activeTasks = tasks.filter(t => t.assignee?.id === member.id).length;
-      return {
-        id: member.id,
-        name: member.name,
-        role: member.role?.name || 'No Role',
-        level: member.role?.level || 99,
-        todoCount: activeTasks, // Simplified for now as TODO + IN_PROGRESS count
-      };
-    });
+    return rawResults.map(res => ({
+      id: res.id,
+      name: res.name,
+      role: res.role || 'No Role',
+      level: Number(res.level) || 99,
+      todoCount: Number(res.todocount), // Postgres COUNT returns a string in raw result
+    }));
   }
 }
