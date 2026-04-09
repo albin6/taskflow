@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { User } from '../users/entities/user.entity';
 import { Team } from '../teams/entities/team.entity';
@@ -17,6 +17,7 @@ export class TasksService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Team)
     private readonly teamRepository: Repository<Team>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createTaskDto: CreateTaskDto, actor: any): Promise<Task> {
@@ -241,7 +242,17 @@ export class TasksService {
         task.assigner = { id: actor.userId } as any;
       }
     }
-    return this.taskRepository.save(task);
+    // Performance: Use .update() instead of .save() to avoid the redundant "find-before-save" SELECT query.
+    await this.taskRepository.update(id, {
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      assignee: task.assignee ? ({ id: task.assignee.id } as any) : null,
+      assigner: task.assigner ? ({ id: task.assigner.id } as any) : null,
+    });
+    return task;
   }
 
   async remove(id: string, actor: any): Promise<{ message: string }> {
@@ -262,55 +273,82 @@ export class TasksService {
   }
 
   async approve(id: string, actor: any) {
-    const task = await this.findOne(id, actor);
-    const isAssigner = task.assigner?.id === actor.userId;
-    const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
+    return await this.dataSource.transaction(async (manager) => {
+      // Use FOR UPDATE (pessimistic_write) lock to ensure no other process can modify this task 
+      // during the validation and status transition phase.
+      const task = await manager.findOne(Task, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+        relations: ['assigner', 'creator', 'team', 'creator.role', 'assignee'],
+      });
 
-    if (!isAssigner && !isManager && actor.level !== 0) {
-      throw new ForbiddenException('Only the assigner or a manager can approve tasks.');
-    }
-
-    const isSelfAssigned = task.assignee?.id === task.creator?.id;
-    if (isSelfAssigned) {
-      const approverLevel = actor.level;
-      const creatorLevel = task.creator?.role?.level ?? 99;
-      if (approverLevel >= creatorLevel && actor.level !== 0) {
-         throw new ForbiddenException('Self-assigned tasks require approval from a user with a higher role in the hierarchy.');
+      if (!task) {
+        throw new NotFoundException(`Task with ID "${id}" not found.`);
       }
-    }
 
-    if (task.status !== 'DONE' as any) {
-      throw new ConflictException('Task is not in DONE status to approve.');
-    }
+      // Hierarchy and permission checks
+      const isAssigner = task.assigner?.id === actor.userId;
+      const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
 
-    task.status = 'APPROVED' as any;
-    return this.taskRepository.save(task);
+      if (!isAssigner && !isManager && actor.level !== 0) {
+        throw new ForbiddenException('Only the assigner or a manager can approve tasks.');
+      }
+
+      const isSelfAssigned = task.assignee?.id === task.creator?.id;
+      if (isSelfAssigned) {
+        const approverLevel = actor.level;
+        const creatorLevel = task.creator?.role?.level ?? 99;
+        if (approverLevel >= creatorLevel && actor.level !== 0) {
+          throw new ForbiddenException('Self-assigned tasks require approval from a user with a higher role in the hierarchy.');
+        }
+      }
+
+      if (task.status !== 'DONE' as any) {
+        throw new ConflictException('Task is not in DONE status to approve.');
+      }
+
+      task.status = 'APPROVED' as any;
+      await manager.update(Task, id, { status: task.status });
+      return task;
+    });
   }
 
   async reject(id: string, actor: any) {
-    const task = await this.findOne(id, actor);
-    const isAssigner = task.assigner?.id === actor.userId;
-    const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
+    return await this.dataSource.transaction(async (manager) => {
+      const task = await manager.findOne(Task, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+        relations: ['assigner', 'creator', 'team', 'creator.role', 'assignee'],
+      });
 
-    if (!isAssigner && !isManager && actor.level !== 0) {
-      throw new ForbiddenException('Only the assigner or a manager can reject tasks.');
-    }
-
-    const isSelfAssigned = task.assignee?.id === task.creator?.id;
-    if (isSelfAssigned) {
-      const approverLevel = actor.level;
-      const creatorLevel = task.creator?.role?.level ?? 99;
-      if (approverLevel >= creatorLevel && actor.level !== 0) {
-         throw new ForbiddenException('Self-assigned tasks require approval from a user with a higher role in the hierarchy.');
+      if (!task) {
+        throw new NotFoundException(`Task with ID "${id}" not found.`);
       }
-    }
 
-    if (task.status !== 'DONE' as any) {
-      throw new ConflictException('Task is not in DONE status to reject.');
-    }
+      const isAssigner = task.assigner?.id === actor.userId;
+      const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
 
-    task.status = 'IN_PROGRESS' as any;
-    return this.taskRepository.save(task);
+      if (!isAssigner && !isManager && actor.level !== 0) {
+        throw new ForbiddenException('Only the assigner or a manager can reject tasks.');
+      }
+
+      const isSelfAssigned = task.assignee?.id === task.creator?.id;
+      if (isSelfAssigned) {
+        const approverLevel = actor.level;
+        const creatorLevel = task.creator?.role?.level ?? 99;
+        if (approverLevel >= creatorLevel && actor.level !== 0) {
+          throw new ForbiddenException('Self-assigned tasks require approval from a user with a higher role in the hierarchy.');
+        }
+      }
+
+      if (task.status !== 'DONE' as any) {
+        throw new ConflictException('Task is not in DONE status to reject.');
+      }
+
+      task.status = 'IN_PROGRESS' as any;
+      await manager.update(Task, id, { status: task.status });
+      return task;
+    });
   }
 
   async getTeamTaskSummary(actor: any): Promise<any[]> {

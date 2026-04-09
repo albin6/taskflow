@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { AuditLog } from './entities/audit-log.entity';
 
 @Injectable()
@@ -9,15 +11,22 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
+    @InjectQueue('audit')
+    private readonly auditQueue: Queue,
   ) {}
 
   @OnEvent('audit.log', { async: true }) // async: true ensures it runs in a separate promise chain
   async handleAuditLog(payload: any) {
     try {
-      const log = this.auditLogRepository.create(payload);
-      await this.auditLogRepository.save(log);
+      // Performance/Stability: Push to persistent Redis-backed queue instead of immediate DB write.
+      // This prevents App RAM growth and allows the DB to process logs at its own pace.
+      await this.auditQueue.add('log', payload, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: true,
+      });
     } catch (err) {
-      console.error('AuditService: Failed to save background log:', err);
+      console.error('AuditService: Failed to queue background log:', err);
     }
   }
 

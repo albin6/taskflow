@@ -133,6 +133,7 @@ export class RecurringTasksService {
       relations: ['assignees', 'team', 'creator'],
     });
 
+    const updatedRTs: RecurringTask[] = [];
     for (const rt of tasksToRun) {
       try {
         await this.generateTaskInstances(rt);
@@ -144,27 +145,33 @@ export class RecurringTasksService {
         if (rt.endDate && rt.nextRunDate > rt.endDate) {
           rt.isActive = false;
         }
-
-        await this.recurringTaskRepository.save(rt);
+        updatedRTs.push(rt);
       } catch (err) {
         this.logger.error(`Failed to generate task for RT ${rt.id}`, err.stack);
       }
     }
+
+    if (updatedRTs.length > 0) {
+      // Performance: Bulk save to reduce DB roundtrips from 2N to 1
+      await this.recurringTaskRepository.save(updatedRTs);
+    }
   }
 
   private async generateTaskInstances(rt: RecurringTask) {
-    for (const assignee of rt.assignees) {
-      const task = this.taskRepository.create({
-        title: rt.title,
-        description: rt.description,
-        priority: rt.priority,
-        status: TaskStatus.TODO,
-        assignee,
-        creator: rt.creator,
-        team: rt.team,
-        dueDate: rt.nextRunDate, // Set due date to the scheduled execution time
-      });
-      await this.taskRepository.save(task);
+    const tasks = rt.assignees.map(assignee => this.taskRepository.create({
+      title: rt.title,
+      description: rt.description,
+      priority: rt.priority,
+      status: TaskStatus.TODO,
+      assignee,
+      creator: rt.creator,
+      team: rt.team,
+      dueDate: rt.nextRunDate,
+    }));
+
+    if (tasks.length > 0) {
+      // Performance: Bulk insert tasks instead of individual saves in a loop
+      await this.taskRepository.insert(tasks);
     }
   }
 
