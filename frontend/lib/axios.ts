@@ -43,6 +43,16 @@ if (typeof window !== 'undefined') {
         original: error,
       };
 
+      // Handle Retries for transient connection failures (status 0)
+      const config = error.config;
+      if (isNetworkError && (!config._retryCount || config._retryCount < 3)) {
+        config._retryCount = (config._retryCount || 0) + 1;
+        // Exponential backoff or simple delay
+        const delay = config._retryCount * 500;
+        console.warn(`[Axios] Connection failed. Retrying... (${config._retryCount}/3) in ${delay}ms`);
+        return new Promise(resolve => setTimeout(() => resolve(api(config)), delay));
+      }
+
       return Promise.reject(genericError);
     }
   );
