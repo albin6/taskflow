@@ -21,7 +21,12 @@ import {
   Users,
   Mail,
   ShieldCheck,
-  MoreVertical
+  MoreVertical,
+  Trash2,
+  Ban,
+  CheckCircle,
+  Edit,
+  ShieldAlert
 } from 'lucide-react';
 import InputError from '../../../../../components/ui/input-error';
 
@@ -42,16 +47,6 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-const userSchema = z.object({
-  name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().optional(),
-  roleId: z.string().min(1, 'Role is required'),
-});
-
-type UserFormValues = z.infer<typeof userSchema>;
-
 export default function TeamUsersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: teamId } = use(params);
   const [team, setTeam] = useState<any>(null);
@@ -71,27 +66,110 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
   const [totalUsers, setTotalUsers] = useState(0);
   const limit = 10;
 
-  // Modal State
+  // Modal & Action State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState('');
+
+  // Define strict types for the form
+  interface UserFormValues {
+    name: string;
+    email: string;
+    password?: string;
+    phone?: string;
+    roleId: string;
+    status?: string | any;
+  }
+
+  // Relax password requirement during edit
+  const userSchema = z.object({
+    name: z.string().min(2, 'Name is required'),
+    email: z.string().email('Invalid email address'),
+    password: isEditMode ? z.string().optional() : z.string().min(6, 'Password must be at least 6 characters'),
+    phone: z.string().optional(),
+    roleId: z.string().min(1, 'Role is required'),
+    status: z.string().optional(),
+  });
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<UserFormValues>({
-    resolver: zodResolver(userSchema),
+    resolver: zodResolver(userSchema) as any,
     defaultValues: {
       name: '',
       email: '',
       password: '',
       phone: '',
       roleId: '',
+      status: 'ACTIVE'
     },
   });
+
+  const handleOpenAddModal = () => {
+    setIsEditMode(false);
+    setSelectedUser(null);
+    reset({
+      name: '',
+      email: '',
+      password: '',
+      phone: '',
+      roleId: '',
+      status: 'ACTIVE'
+    });
+    setServerError('');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (user: any) => {
+    setIsEditMode(true);
+    setSelectedUser(user);
+    // Use reset to populate the form
+    reset({
+      name: user.name,
+      email: user.email,
+      phone: user.phone || '',
+      roleId: user.role?.id || '',
+      status: user.status || 'ACTIVE'
+    });
+    setServerError('');
+    setIsModalOpen(true);
+    setActiveMenuId(null);
+  };
+
+  const handleToggleBlock = async (user: any) => {
+    try {
+      const newStatus = user.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+      await api.patch(`/users/${user.id}`, { status: newStatus });
+      fetchUsers();
+    } catch (err: any) {
+      console.error('Failed to toggle user status', err);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedUser) return;
+    setSubmitting(true);
+    try {
+      await api.delete(`/users/${selectedUser.id}`);
+      setIsDeleteModalOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      setServerError(err.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const fetchTeamDetails = useCallback(async () => {
     try {
@@ -158,14 +236,32 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
   const onSubmit = async (data: UserFormValues) => {
     setSubmitting(true);
     setServerError('');
-
+    
     try {
-      await api.post('/users', { ...data, teamId });
+      if (isEditMode && selectedUser) {
+        // Handle Edit: Use PATCH
+        const updateData: any = {
+          name: data.name,
+          phone: data.phone,
+          roleId: data.roleId,
+          status: data.status
+        };
+        // Only send password if it was changed (not typical for this modal but good to have)
+        if (data.password) {
+          updateData.password = data.password;
+        }
+        
+        await api.patch(`/users/${selectedUser.id}`, updateData);
+      } else {
+        // Handle Create: Use POST
+        await api.post('/users', { ...data, teamId, status: 'ACTIVE' });
+      }
+      
       setIsModalOpen(false);
       reset();
       fetchUsers();
     } catch (err: any) {
-      setServerError(err.response?.data?.message || err.message || 'Failed to create user.');
+      setServerError(err.response?.data?.message || err.message || `Failed to ${isEditMode ? 'update' : 'create'} user.`);
     } finally {
       setSubmitting(false);
     }
@@ -192,7 +288,7 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
         <button 
-          onClick={() => { reset(); setServerError(''); setIsModalOpen(true); }}
+          onClick={handleOpenAddModal}
           className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
         >
           <UserPlus className="h-4 w-4 stroke-[3px]" />
@@ -319,9 +415,55 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                     <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
-                       <MoreVertical className="h-4 w-4" />
-                     </button>
+                    <div className="relative inline-block text-left">
+                      <button 
+                        onClick={() => setActiveMenuId(activeMenuId === user.id ? null : user.id)}
+                        className={`p-2 rounded-lg transition-colors ${activeMenuId === user.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-muted-foreground'}`}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                      
+                      {activeMenuId === user.id && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-10" 
+                            onClick={() => setActiveMenuId(null)}
+                          />
+                          <div className="absolute right-0 mt-2 w-48 rounded-xl bg-card border border-border shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                             <button 
+                               onClick={() => handleOpenEditModal(user)}
+                               className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition-colors border-b border-border/50"
+                             >
+                               <Edit className="h-3.5 w-3.5 text-primary" />
+                               Edit Profile
+                             </button>
+                             <button 
+                               onClick={() => { handleToggleBlock(user); setActiveMenuId(null); }}
+                               className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition-colors border-b border-border/50"
+                             >
+                               {user.status === 'SUSPENDED' ? (
+                                 <>
+                                   <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                   Unblock User
+                                 </>
+                               ) : (
+                                 <>
+                                   <Ban className="h-3.5 w-3.5 text-orange-500" />
+                                   Block User
+                                 </>
+                               )}
+                             </button>
+                             <button 
+                               onClick={() => { setSelectedUser(user); setIsDeleteModalOpen(true); setActiveMenuId(null); }}
+                               className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/5 transition-colors"
+                             >
+                               <Trash2 className="h-3.5 w-3.5" />
+                               Delete Member
+                             </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -368,16 +510,23 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {/* Add User Modal (Matching original logic) */}
+      {/* Add/Edit User Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
           <div className="bg-card w-full max-w-md p-7 rounded-[24px] border border-border/10 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-black text-foreground uppercase tracking-tight">Provision Member</h2>
-                <p className="text-xs text-muted-foreground mt-0.5 font-medium">Bypasses registration approval</p>
+                <h2 className="text-xl font-black text-foreground uppercase tracking-tight">
+                  {isEditMode ? 'Edit Profile' : 'Provision Member'}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+                  {isEditMode ? `Updating ${selectedUser?.name}` : 'Bypasses registration approval'}
+                </p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="h-8 w-8 rounded-full flex items-center justify-center bg-muted hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-all">
+              <button 
+                onClick={() => setIsModalOpen(false)} 
+                className="h-8 w-8 rounded-full flex items-center justify-center bg-muted hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-all"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -404,7 +553,9 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                   <input 
                     {...register('email')}
                     type="email" 
+                    readOnly={isEditMode}
                     className={`w-full px-4 py-3 rounded-xl border bg-background/50 text-sm font-medium transition-all ${
+                      isEditMode ? 'opacity-60 cursor-not-allowed bg-muted/20' : 
                       errors.email ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border/60 focus:ring-2 focus:ring-primary/20'
                     }`}
                     placeholder="name@company.com"
@@ -414,7 +565,9 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Password</label>
+                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">
+                      {isEditMode ? 'New Password (Optional)' : 'Password'}
+                    </label>
                     <div className="relative">
                       <input 
                         {...register('password')}
@@ -422,7 +575,7 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                         className={`w-full px-4 py-3 pr-10 rounded-xl border bg-background/50 text-sm font-medium transition-all ${
                           errors.password ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border/60 focus:ring-2 focus:ring-primary/20'
                         }`}
-                        placeholder="••••••••"
+                        placeholder={isEditMode ? 'Keep current' : '••••••••'}
                       />
                       <button
                         type="button"
@@ -445,18 +598,32 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Assigned Role</label>
-                  <select 
-                    {...register('roleId')}
-                    className={`w-full px-4 py-3 rounded-xl border bg-background/50 text-sm font-black transition-all appearance-none cursor-pointer ${
-                      errors.roleId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border/60 focus:ring-2 focus:ring-primary/20'
-                    }`}
-                  >
-                    <option value="">Choose a Role</option>
-                    {roles.map(r => <option key={r.id} value={r.id}>{r.name} - LVL {r.level}</option>)}
-                  </select>
-                  <InputError message={errors.roleId?.message} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Assigned Role</label>
+                    <select 
+                      {...register('roleId')}
+                      className={`w-full px-4 py-3 rounded-xl border bg-background/50 text-sm font-black transition-all appearance-none cursor-pointer ${
+                        errors.roleId ? 'border-red-500 ring-2 ring-red-500/10' : 'border-border/60 focus:ring-2 focus:ring-primary/20'
+                      }`}
+                    >
+                      <option value="">Choose a Role</option>
+                      {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                    <InputError message={errors.roleId?.message} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Status</label>
+                    <select 
+                      {...register('status')}
+                      className="w-full px-4 py-3 rounded-xl border border-border/60 bg-background/50 text-sm font-black focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="PENDING">Pending</option>
+                      <option value="REJECTED">Rejected</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -476,12 +643,46 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                   {submitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Provisioning...
+                      {isEditMode ? 'Updating...' : 'Provisioning...'}
                     </>
-                  ) : 'Finish Provisioning'}
+                  ) : (
+                    isEditMode ? 'Save Changes' : 'Finish Provisioning'
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-in fade-in duration-300">
+          <div className="bg-card w-full max-w-sm p-7 rounded-[24px] border border-red-500/20 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div className="h-14 w-14 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-2">
+                <Trash2 size={28} />
+              </div>
+              <h2 className="text-xl font-black text-foreground uppercase tracking-tight">Delete Member?</h2>
+              <p className="text-sm text-muted-foreground font-medium">
+                Are you sure you want to remove <span className="text-foreground font-bold">{selectedUser?.name}</span>? This action is permanent.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)} 
+                className="flex-1 px-5 py-3 rounded-xl border border-border bg-background hover:bg-muted font-bold text-sm transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDeleteConfirm}
+                disabled={submitting}
+                className="flex-1 px-5 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm shadow-xl shadow-red-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete User'}
+              </button>
+            </div>
           </div>
         </div>
       )}
