@@ -74,7 +74,7 @@ export default function Sidebar() {
       label: 'Approvals',
       icon: ShieldAlert,
       href: '/team/approvals',
-      visible: user.level > 0 && user.level <= 2,
+      visible: user.level >= 0 && user.level <= 2,
     },
     {
       label: 'Audit Log',

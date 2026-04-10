@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import api from '../../../lib/axios';
+import { useAuthStore } from '../../../store/useAuthStore';
 import { Check, X } from 'lucide-react';
 
 export default function TeamApprovalsPage() {
+  const { user } = useAuthStore();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const isAdmin = user?.level === 0;
 
   useEffect(() => {
     fetchApprovals();
@@ -37,7 +41,9 @@ export default function TeamApprovalsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Pending Approvals</h1>
-        <p className="text-sm text-muted-foreground mt-1">Review registration requests from your team members</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isAdmin ? 'Review registration requests from across all teams' : 'Review registration requests from your team members'}
+        </p>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
@@ -50,6 +56,7 @@ export default function TeamApprovalsPage() {
               <tr className="bg-muted/50">
                 <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Requester</th>
                 <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email</th>
+                {isAdmin && <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team</th>}
                 <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Requested Role</th>
                 <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
@@ -59,6 +66,7 @@ export default function TeamApprovalsPage() {
                 <tr key={request.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-6 py-4 font-medium text-foreground">{request.requester?.name}</td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">{request.requester?.email}</td>
+                  {isAdmin && <td className="px-6 py-4 text-sm text-foreground">{request.requester?.team?.name || 'Global'}</td>}
                   <td className="px-6 py-4 text-sm text-foreground">{request.requestedRole?.name || 'N/A'}</td>
                   <td className="px-6 py-4 flex items-center gap-2">
                     <button
@@ -80,7 +88,7 @@ export default function TeamApprovalsPage() {
               ))}
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground text-sm">
+                  <td colSpan={isAdmin ? 5 : 4} className="px-6 py-8 text-center text-muted-foreground text-sm">
                     {loading ? 'Loading requests...' : 'No pending approvals found.'}
                   </td>
                 </tr>
