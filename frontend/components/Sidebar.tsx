@@ -47,12 +47,6 @@ export default function Sidebar() {
       visible: user.level === 0,
     },
     {
-      label: 'Members',
-      icon: Users,
-      href: '/admin/users',
-      visible: user.level === 0, // Split Admin from Workspace Members
-    },
-    {
       label: 'Roles',
       icon: Settings,
       href: '/admin/roles',

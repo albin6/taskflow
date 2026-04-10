@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import Link from 'next/link';
 import api from '../../../lib/axios';
 import { Plus, Users, Loader2 } from 'lucide-react';
 import InputError from '../../../components/ui/input-error';
@@ -117,13 +118,13 @@ export default function AdminTeamsPage() {
               <tr className="bg-muted/50">
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Name</th>
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking_widest">ID Reference</th>
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {loadingTasks && teams.length === 0 ? (
                 <tr>
-                   <td colSpan={3} className="px-6 py-12 text-center text-muted-foreground animate-pulse font-medium italic">Synchronizing teams...</td>
+                   <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground animate-pulse font-medium italic">Synchronizing teams...</td>
                 </tr>
               ) : teams.map((team) => (
                 <tr key={team.id} className="hover:bg-muted/30 transition-colors group">
@@ -139,11 +140,20 @@ export default function AdminTeamsPage() {
                         Active
                      </span>
                   </td>
+                  <td className="px-6 py-4 text-right">
+                    <Link
+                      href={`/admin/teams/${team.id}/users`}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
+                    >
+                      <Users className="h-3 w-3" />
+                      Manage Members
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {!loadingTasks && teams.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-muted-foreground text-sm italic">
+                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground text-sm italic">
                     No teams established. Create your first organizational unit above.
                   </td>
                 </tr>

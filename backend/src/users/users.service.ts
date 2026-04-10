@@ -8,6 +8,7 @@ import { Role } from '../roles/entities/role.entity';
 import { Team } from '../teams/entities/team.entity';
 import { CreateUserDto, UpdateUserDto } from './dto/user-management.dto';
 import { UserStatus } from '../common/enums';
+import { UserQueryDto } from './dto/user-query.dto';
 
 @Injectable()
 export class UsersService {
@@ -18,7 +19,7 @@ export class UsersService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(Team)
     private readonly teamRepository: Repository<Team>,
-  ) {}
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const { name, email, password, phone, teamId, roleId } = createUserDto;
@@ -57,24 +58,54 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  async findAll(actor: any, filterActiveOnly: boolean = false): Promise<User[]> {
+  async findAll(actor: any, queryDto?: UserQueryDto, filterActiveOnly: boolean = false): Promise<any> {
+    const { search, sortBy = 'name', sortOrder = 'ASC', status, page = 1, limit = 10, teamId } = queryDto || {};
+
     const query = this.userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.team', 'team')
-      .leftJoinAndSelect('user.role', 'role')
-      .select([
-        'user.id', 'user.name', 'user.email', 'user.phone', 'user.status', 'user.createdAt',
-        'team.id', 'team.name',
-        'role.id', 'role.name', 'role.level'
-      ]); // Exclude password from SELECT implicitly via field list
+      .leftJoinAndSelect('user.role', 'role');
 
-    // Admin level 0 views ALL. Level 1+ views absolute team scopes.
+    // Admin level 0 views ALL by default, unless teamId is provided.
+    // Level 1+ views absolute team scopes.
     if (actor.level !== 0 && actor.teamId) {
-      query.where('team.id = :teamId', { teamId: actor.teamId });
+      query.where('team.id = :actorTeamId', { actorTeamId: actor.teamId });
+    } else if (teamId) {
+      query.where('team.id = :targetTeamId', { targetTeamId: teamId });
     }
 
     if (filterActiveOnly) {
-       query.andWhere('user.status = :status', { status: UserStatus.ACTIVE });
+      query.andWhere('user.status = :activeStatus', { activeStatus: UserStatus.ACTIVE });
+    } else if (status) {
+      query.andWhere('user.status = :status', { status });
+    }
+
+    if (search) {
+      query.andWhere('(LOWER(user.name) LIKE LOWER(:search) OR LOWER(user.email) LIKE LOWER(:search))', {
+        search: `%${search}%`,
+      });
+    }
+
+    // Sorting
+    const allowedSortFields = ['name', 'email', 'status', 'createdAt', 'role.name'];
+    const actualSortField = allowedSortFields.includes(sortBy) ? (sortBy.includes('.') ? sortBy : `user.${sortBy}`) : 'user.name';
+    query.orderBy(actualSortField, sortOrder as 'ASC' | 'DESC');
+
+    // Pagination - only if queryDto is provided (legacy roster endpoint won't paginate)
+    if (queryDto) {
+      const skip = (page - 1) * limit;
+      const [data, total] = await query
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     }
 
     return query.getMany();
@@ -105,10 +136,10 @@ export class UsersService {
       if (!role) {
         throw new NotFoundException(`Role with ID "${updateUserDto.roleId}" not found.`);
       }
-      
+
       // Safety: check if updating role respects team boundary (user already has team attached)
       if (role.team && user.team && role.team.id !== user.team.id) {
-         throw new ConflictException('Target role does not belong to user\'s team.');
+        throw new ConflictException('Target role does not belong to user\'s team.');
       }
       user.role = role;
     }
@@ -118,7 +149,7 @@ export class UsersService {
 
   async remove(id: string): Promise<{ message: string }> {
     const user = await this.findOne(id);
-    
+
     // Safety: Cannot delete Level 0 directly from endpoint generally without protection?
     if (user.role?.level === 0) {
       throw new ForbiddenException('Root Administrator account cannot be deleted.');

@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { UserQueryDto } from './dto/user-query.dto';
 import { CreateUserDto, UpdateUserDto } from './dto/user-management.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -20,13 +21,13 @@ export class UsersController {
 
   @Get()
   @RequirePermissions(Permissions.MANAGE_USERS)
-  findAll(@Req() req: any) {
-    return this.usersService.findAll(req.user, false);
+  findAll(@Req() req: any, @Query() query: UserQueryDto) {
+    return this.usersService.findAll(req.user, query);
   }
 
   @Get('roster')
   findRoster(@Req() req: any) {
-    return this.usersService.findAll(req.user, true);
+    return this.usersService.findAll(req.user, undefined, true);
   }
 
   @Get(':id')
