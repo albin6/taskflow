@@ -25,16 +25,24 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
   
   // Enable CORS for frontend requests
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   app.enableCors({
-    origin: [
-      frontendUrl,
-      frontendUrl.replace('localhost', '127.0.0.1'),
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3001',
-    ],
+    origin: (origin, callback) => {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const allowedOrigins = [
+        frontendUrl,
+        frontendUrl.replace(/\/$/, ''), // Remove trailing slash
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
+      ];
+      
+      if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   });
 
