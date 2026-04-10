@@ -4,7 +4,6 @@ import { BullModule } from '@nestjs/bullmq';
 import { ObservabilityService } from './observability.service';
 import { DatabaseMetricsService } from './database-metrics.service';
 import { QueueMetricsService } from './queue-metrics.service';
-import { MonitoringController } from './monitoring.controller';
 import { AuditLog } from '../audit/entities/audit-log.entity';
 
 @Module({
@@ -14,7 +13,7 @@ import { AuditLog } from '../audit/entities/audit-log.entity';
       name: 'audit',
     }),
   ],
-  controllers: [MonitoringController],
+  controllers: [],
   providers: [
     ObservabilityService,
     DatabaseMetricsService,
