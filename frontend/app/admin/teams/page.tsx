@@ -117,7 +117,8 @@ export default function AdminTeamsPage() {
             <thead>
               <tr className="bg-muted/50">
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Name</th>
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking_widest">ID Reference</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">ID Reference</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest">Status</th>
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>

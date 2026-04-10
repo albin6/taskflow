@@ -25,8 +25,16 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
   
   // Enable CORS for frontend requests
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001', // Next.js
+    origin: [
+      frontendUrl,
+      frontendUrl.replace('localhost', '127.0.0.1'),
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
+    ],
     credentials: true,
   });
 

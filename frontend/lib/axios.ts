@@ -35,10 +35,11 @@ if (typeof window !== 'undefined') {
       }
 
       // Standardize the error response for easier UI usage
+      const isNetworkError = !error.response;
       const genericError = {
-        message,
-        code: error.response?.data?.code || 'NETWORK_ERROR',
-        status: error.response?.status || 500,
+        message: isNetworkError ? 'Connection failed. Please check if the backend is running and CORS is allowed.' : message,
+        code: error.response?.data?.code || (isNetworkError ? 'CONNECTION_ERROR' : 'UNKNOWN_ERROR'),
+        status: error.response?.status || (isNetworkError ? 0 : 500), // Status 0 represents network failure
         original: error,
       };
 
