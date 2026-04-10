@@ -223,7 +223,8 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
             <option value="">All Statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING">Pending</option>
-            <option value="INACTIVE">Inactive</option>
+            <option value="SUSPENDED">Suspended</option>
+            <option value="REJECTED">Rejected</option>
           </select>
         </div>
 
@@ -310,7 +311,9 @@ export default function TeamUsersPage({ params }: { params: Promise<{ id: string
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
                       user.status === 'ACTIVE' ? 'bg-green-500/10 text-green-600 border-green-500/20' : 
-                      user.status === 'PENDING' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' : 'bg-red-500/10 text-red-600 border-red-500/20'
+                      user.status === 'PENDING' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' : 
+                      user.status === 'SUSPENDED' ? 'bg-orange-500/10 text-orange-600 border-orange-500/20' :
+                      'bg-red-500/10 text-red-600 border-red-500/20'
                     }`}>
                       {user.status}
                     </span>
