@@ -5,16 +5,19 @@ import { z } from 'zod';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../../lib/axios';
-import { Plus, Shield, Trash2, Pencil, X, Loader2 } from 'lucide-react';
+import { Plus, Shield, Trash2, Pencil, X, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
 import BadgeList from '../../../components/ui/badge-list';
 import InputError from '../../../components/ui/input-error';
 const ALL_PERMISSIONS = [
+  { id: 'MANAGE_TEAMS', label: 'Manage Teams' },
+  { id: 'VIEW_TEAMS', label: 'View Teams' },
+  { id: 'ASSIGN_HEAD', label: 'Assign Team Head' },
   { id: 'MANAGE_ROLES', label: 'Manage Roles' },
   { id: 'REORDER_ROLES', label: 'Reorder Roles' },
   { id: 'MANAGE_USERS', label: 'Manage Users' },
   { id: 'APPROVE_REGISTRATIONS', label: 'Approve Registrations' },
-  { id: 'VIEW_TEAMS', label: 'View Teams' },
+  { id: 'VIEW_GLOBAL_AUDIT', label: 'View Global Audit Log' },
   { id: 'VIEW_TEAM_AUDIT', label: 'View Team Audit Log' },
   { id: 'VIEW_TASKS', label: 'View Tasks' },
   { id: 'CREATE_TASK', label: 'Create Tasks' },
@@ -167,6 +170,48 @@ export default function AdminRolesPage() {
     }
   };
 
+  const handleMoveUp = async (index: number) => {
+    if (index === 0) return;
+    const currentRole = roles[index];
+    const upperRole = roles[index - 1];
+
+    if (upperRole.level === 0 || currentRole.level === 0) return;
+
+    try {
+      const payload = {
+        roles: [
+          { id: currentRole.id, level: upperRole.level },
+          { id: upperRole.id, level: currentRole.level }
+        ]
+      };
+      await api.post(`/roles/${selectedTeamId}/reorder`, payload);
+      fetchRoles(selectedTeamId);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to reorder roles.');
+    }
+  };
+
+  const handleMoveDown = async (index: number) => {
+    if (index === roles.length - 1) return;
+    const currentRole = roles[index];
+    const lowerRole = roles[index + 1];
+
+    if (lowerRole.level === 0 || currentRole.level === 0) return;
+
+    try {
+      const payload = {
+        roles: [
+          { id: currentRole.id, level: lowerRole.level },
+          { id: lowerRole.id, level: currentRole.level }
+        ]
+      };
+      await api.post(`/roles/${selectedTeamId}/reorder`, payload);
+      fetchRoles(selectedTeamId);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to reorder roles.');
+    }
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pb-8">
       <div className="flex items-center justify-between">
@@ -210,7 +255,7 @@ export default function AdminRolesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
-              {roles.map((role) => (
+              {roles.map((role, index) => (
                 <tr key={role.id} className="hover:bg-muted/30 transition-colors group">
                   <td className="px-6 py-4 flex items-center gap-3 font-semibold text-foreground">
                     <div className="p-2 rounded-lg bg-primary/5 group-hover:bg-primary/10 transition-colors">
@@ -219,7 +264,27 @@ export default function AdminRolesPage() {
                     {role.name}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
-                    <span className="px-2 py-1 bg-muted rounded-lg text-muted-foreground">Level {role.level}</span>
+                    <div className="flex items-center gap-2">
+                       <span className="px-2 py-1 bg-muted rounded-lg text-muted-foreground min-w-[70px] text-center text-[10px] font-black uppercase tracking-tighter">Level {role.level}</span>
+                       {role.level > 0 && (
+                          <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button 
+                                onClick={() => handleMoveUp(index)} 
+                                disabled={index === 0 || roles[index-1].level === 0}
+                                className="p-0.5 hover:bg-primary/20 hover:text-primary rounded transition-all disabled:opacity-30"
+                             >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                             </button>
+                             <button 
+                                onClick={() => handleMoveDown(index)} 
+                                disabled={index === roles.length - 1}
+                                className="p-0.5 hover:bg-primary/20 hover:text-primary rounded transition-all disabled:opacity-30"
+                             >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                             </button>
+                          </div>
+                       )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                      <BadgeList items={role.permissions} limit={3} />

@@ -122,10 +122,10 @@ export class RolesService {
       throw new NotFoundException('Some role IDs were missing or do not belong to this team.');
     }
 
-    // 2. Verify no absolute anchor tampering
+    // 2. Verify no absolute anchor tampering (Level 0 is Global Admin and must stay at 0)
     for (const role of existingRoles) {
-      if (role.level <= 2) {
-        throw new ForbiddenException(`Anchor roles like "${role.name}" (Level ${role.level}) cannot be reordered.`);
+      if (role.level === 0) {
+        throw new ForbiddenException(`The Global Admin role (Level 0) is immutable and cannot be reordered.`);
       }
     }
 
