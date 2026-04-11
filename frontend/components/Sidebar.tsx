@@ -50,7 +50,9 @@ export default function Sidebar() {
       label: 'Roles',
       icon: Settings,
       href: '/admin/roles',
-      visible: user.level === 0,
+      visible: user.level === 0 || 
+               user.permissions?.includes('MANAGE_ROLES') || 
+               user.permissions?.includes('REORDER_ROLES'),
     },
     {
       label: 'Audit Logs',

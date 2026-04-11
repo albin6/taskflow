@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../../lib/axios';
+import { useAuthStore } from '../../../store/useAuthStore';
 import { Plus, Shield, Trash2, Pencil, X, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 import ConfirmationModal from '../../../components/ui/confirmation-modal';
 import BadgeList from '../../../components/ui/badge-list';
@@ -63,11 +64,19 @@ export default function AdminRolesPage() {
     },
   });
 
+  const { user } = useAuthStore();
   const currentPermissions = watch('permissions');
 
+  const canManageRoles = user?.level === 0 || user?.permissions?.includes('MANAGE_ROLES');
+  const canReorderRoles = user?.level === 0 || user?.permissions?.includes('REORDER_ROLES');
+
   useEffect(() => {
-    fetchTeams();
-  }, []);
+    if (user?.level === 0) {
+      fetchTeams();
+    } else if (user?.teamId) {
+      setSelectedTeamId(user.teamId);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (selectedTeamId) {
@@ -220,24 +229,28 @@ export default function AdminRolesPage() {
           <p className="text-sm text-muted-foreground mt-1 font-medium italic">Manage custom hierarchy levels and accessible action permissions</p>
         </div>
         <div className="flex gap-3">
-          <select 
-            value={selectedTeamId} 
-            onChange={(e) => setSelectedTeamId(e.target.value)}
-            className="px-4 py-2 rounded-xl border border-border/60 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
-          >
-            <option value="">Select a Team</option>
-            {teams.map(team => (
-              <option key={team.id} value={team.id}>{team.name}</option>
-            ))}
-          </select>
-          <button 
-            onClick={openCreateModal}
-            disabled={!selectedTeamId}
-            className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 active:scale-95"
-          >
-            <Plus className="h-4 w-4 stroke-[3px]" />
-            Add Role
-          </button>
+          {user?.level === 0 && (
+            <select 
+              value={selectedTeamId} 
+              onChange={(e) => setSelectedTeamId(e.target.value)}
+              className="px-4 py-2 rounded-xl border border-border/60 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+            >
+              <option value="">Select a Team</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          )}
+          {canManageRoles && (
+            <button 
+              onClick={openCreateModal}
+              disabled={!selectedTeamId}
+              className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 active:scale-95"
+            >
+              <Plus className="h-4 w-4 stroke-[3px]" />
+              Add Role
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,7 +279,7 @@ export default function AdminRolesPage() {
                   <td className="px-6 py-4 text-sm font-medium">
                     <div className="flex items-center gap-2">
                        <span className="px-2 py-1 bg-muted rounded-lg text-muted-foreground min-w-[70px] text-center text-[10px] font-black uppercase tracking-tighter">Level {role.level}</span>
-                       {role.level > 0 && (
+                       {role.level > 0 && canReorderRoles && (
                           <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                              <button 
                                 onClick={() => handleMoveUp(index)} 
@@ -291,14 +304,16 @@ export default function AdminRolesPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button 
-                        onClick={() => openEditModal(role)}
-                        className="text-primary hover:text-primary/80 p-2 rounded-xl hover:bg-primary/10 transition-colors"
-                        title="Edit Role"
-                      >
-                        <Pencil className="h-4.5 w-4.5" />
-                      </button>
-                      {role.level > 2 && (
+                      {canManageRoles && (
+                        <button 
+                          onClick={() => openEditModal(role)}
+                          className="text-primary hover:text-primary/80 p-2 rounded-xl hover:bg-primary/10 transition-colors"
+                          title="Edit Role"
+                        >
+                          <Pencil className="h-4.5 w-4.5" />
+                        </button>
+                      )}
+                      {canManageRoles && role.level > 2 && (
                         <button 
                           onClick={() => confirmDeleteRole(role.id)}
                           className="text-red-500 hover:text-red-600 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
