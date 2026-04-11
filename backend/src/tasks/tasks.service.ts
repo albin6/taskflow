@@ -242,17 +242,9 @@ export class TasksService {
         task.assigner = { id: actor.userId } as any;
       }
     }
-    // Performance: Use .update() instead of .save() to avoid the redundant "find-before-save" SELECT query.
-    await this.taskRepository.update(id, {
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      dueDate: task.dueDate,
-      assignee: task.assignee ? ({ id: task.assignee.id } as any) : null,
-      assigner: task.assigner ? ({ id: task.assigner.id } as any) : null,
-    });
-    return task;
+    // Persist the changes. Using .save() is more reliable for entities with relations 
+    // than .update() which can fail when mapping relation objects to database columns.
+    return await this.taskRepository.save(task);
   }
 
   async remove(id: string, actor: any): Promise<{ message: string }> {
@@ -303,13 +295,12 @@ export class TasksService {
         }
       }
 
-      if (task.status !== 'DONE' as any) {
+      if (task.status !== TaskStatus.DONE) {
         throw new ConflictException('Task is not in DONE status to approve.');
       }
 
-      task.status = 'APPROVED' as any;
-      await manager.update(Task, id, { status: task.status });
-      return task;
+      task.status = TaskStatus.APPROVED;
+      return await manager.save(Task, task);
     });
   }
 
@@ -341,13 +332,12 @@ export class TasksService {
         }
       }
 
-      if (task.status !== 'DONE' as any) {
+      if (task.status !== TaskStatus.DONE) {
         throw new ConflictException('Task is not in DONE status to reject.');
       }
 
-      task.status = 'IN_PROGRESS' as any;
-      await manager.update(Task, id, { status: task.status });
-      return task;
+      task.status = TaskStatus.IN_PROGRESS;
+      return await manager.save(Task, task);
     });
   }
 

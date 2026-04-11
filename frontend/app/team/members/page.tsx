@@ -86,9 +86,10 @@ export default function TeamMembersPage() {
     setLoading(true);
     try {
       const res = await api.get('/users'); 
-      setMembers(res.data);
+      setMembers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch team members', err);
+      setMembers([]);
     } finally {
       setLoading(false);
     }
@@ -108,9 +109,14 @@ export default function TeamMembersPage() {
       const res = await api.get(`/roles?teamId=${teamId}`);
       // Only show roles that are strictly lower level than current user
       // If user is Admin (0), show all. If Head (1), show Level 2+.
-      setRoles(res.data.filter((r: any) => r.level > (user?.level || 0)));
+      if (Array.isArray(res.data)) {
+        setRoles(res.data.filter((r: any) => r.level > (user?.level || 0)));
+      } else {
+        setRoles([]);
+      }
     } catch (err) {
       console.error('Failed to fetch roles', err);
+      setRoles([]);
     }
   };
 
