@@ -26,6 +26,10 @@ export class CreateUserDto {
   @IsUUID()
   @IsNotEmpty()
   roleId: string;
+
+  @IsString()
+  @IsOptional()
+  status?: UserStatus;
 }
 
 export class UpdateUserDto {

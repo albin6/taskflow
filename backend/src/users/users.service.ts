@@ -52,7 +52,7 @@ export class UsersService {
       phone,
       team,
       role,
-      status: UserStatus.ACTIVE, // Created by Admin/Manager langsung active
+      status: createUserDto.status || UserStatus.ACTIVE, // Respect provided status or default to ACTIVE
     });
 
     return this.userRepository.save(user);

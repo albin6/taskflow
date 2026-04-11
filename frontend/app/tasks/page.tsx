@@ -370,17 +370,21 @@ export default function TasksPage() {
   };
 
   const canApprove = (task: any): boolean => {
+     if (task.status !== 'DONE') return false;
+     if (user?.level === 0) return true; // Global Admin always has bypass
+
      const isAssigner = task.assigner?.id === user?.userId;
-     const isManager = (user?.level !== undefined && user.level <= 2);
      const isSelfAssigned = task.assignee?.id === task.creator?.id;
 
-     if (task.status !== 'DONE') return false;
      if (isSelfAssigned) {
+        // For self-assigned tasks, only a HIGHER role can approve
         const actorLevel = user?.level ?? 99;
-        const creatorLevel = task.creator?.creator_role?.level ?? 99;
-        return !!(actorLevel < creatorLevel || user?.level === 0); 
+        const creatorLevel = task.creator?.role?.level ?? 99;
+        return !!(actorLevel < creatorLevel); 
      }
-     return !!(isAssigner || isManager || user?.level === 0);
+
+     // Standard Case: ONLY the assigner can approve/reject
+     return !!isAssigner;
   };
 
   const isOverdue = (task: any) => {
