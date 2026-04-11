@@ -97,14 +97,10 @@ export class TasksService {
       // Restrict to their own team
       query.andWhere('team.id = :teamId', { teamId: actor.teamId });
 
-      // Role-Based Detail Visibility
-      // Executive (Level 3+) sees only tasks they part of
-      if (actor.level > 2) {
-        query.andWhere('(creator.id = :userId OR assignee.id = :userId)', {
-          userId: actor.userId
-        });
-      }
-      // Manager/Head (Level 1-2) can see ALL tasks in their team
+      // Core Rule: Only visible to assigner and assignee
+      query.andWhere('(assigner.id = :userId OR assignee.id = :userId)', {
+        userId: actor.userId
+      });
     }
 
     if (filterByAssigneeId) {
@@ -141,12 +137,10 @@ export class TasksService {
         throw new ForbiddenException('You cannot access tasks outside your team.');
       }
 
-      // If Executive, must be involved
-      if (actor.level > 2) {
-        const isInvolved = task.creator?.id === actor.userId || task.assignee?.id === actor.userId;
-        if (!isInvolved) {
-          throw new ForbiddenException('You do not have permission to view this task.');
-        }
+      // Core Rule: Only visible to assigner and assignee
+      const isInvolved = task.assigner?.id === actor.userId || task.assignee?.id === actor.userId;
+      if (!isInvolved) {
+        throw new ForbiddenException('You do not have permission to view this task.');
       }
     }
 
@@ -266,24 +260,30 @@ export class TasksService {
 
   async approve(id: string, actor: any) {
     return await this.dataSource.transaction(async (manager) => {
-      // Use FOR UPDATE (pessimistic_write) lock to ensure no other process can modify this task 
-      // during the validation and status transition phase.
-      const task = await manager.findOne(Task, {
+      // 1. Lock only the Task row first (no outer joins) to satisfy Postgres restrictions
+      const taskBase = await manager.findOne(Task, {
         where: { id },
         lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!taskBase) {
+        throw new NotFoundException(`Task with ID "${id}" not found.`);
+      }
+
+      // 2. Load necessary relations for validation separately contextually
+      const task = await manager.findOne(Task, {
+        where: { id },
         relations: ['assigner', 'creator', 'team', 'creator.role', 'assignee'],
       });
 
       if (!task) {
-        throw new NotFoundException(`Task with ID "${id}" not found.`);
+         throw new NotFoundException(`Task with ID "${id}" record lost during lock phase.`);
       }
 
-      // Hierarchy and permission checks
+      // 3. Permission Check: Only the assigner (delegator) can approve tasks.
       const isAssigner = task.assigner?.id === actor.userId;
-      const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
-
-      if (!isAssigner && !isManager && actor.level !== 0) {
-        throw new ForbiddenException('Only the assigner or a manager can approve tasks.');
+      if (!isAssigner && actor.level !== 0) {
+        throw new ForbiddenException('Only the person who assigned the task can approve it.');
       }
 
       const isSelfAssigned = task.assignee?.id === task.creator?.id;
@@ -306,21 +306,30 @@ export class TasksService {
 
   async reject(id: string, actor: any) {
     return await this.dataSource.transaction(async (manager) => {
-      const task = await manager.findOne(Task, {
+      // 1. Lock only the Task row first
+      const taskBase = await manager.findOne(Task, {
         where: { id },
         lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!taskBase) {
+        throw new NotFoundException(`Task with ID "${id}" not found.`);
+      }
+
+      // 2. Load necessary relations
+      const task = await manager.findOne(Task, {
+        where: { id },
         relations: ['assigner', 'creator', 'team', 'creator.role', 'assignee'],
       });
 
       if (!task) {
-        throw new NotFoundException(`Task with ID "${id}" not found.`);
+         throw new NotFoundException(`Task with ID "${id}" record lost during lock phase.`);
       }
 
+      // 3. Permission Check: Only the assigner can reject tasks.
       const isAssigner = task.assigner?.id === actor.userId;
-      const isManager = actor.level <= 2 && task.team?.id === actor.teamId;
-
-      if (!isAssigner && !isManager && actor.level !== 0) {
-        throw new ForbiddenException('Only the assigner or a manager can reject tasks.');
+      if (!isAssigner && actor.level !== 0) {
+        throw new ForbiddenException('Only the person who assigned the task can reject it.');
       }
 
       const isSelfAssigned = task.assignee?.id === task.creator?.id;
