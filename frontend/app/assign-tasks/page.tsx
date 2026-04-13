@@ -31,7 +31,7 @@ const taskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title too long'),
   description: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
-  assigneeId: z.string().min(1, 'Assignee is required'),
+  assigneeId: z.string().optional(),
   dueDate: z.string().optional().nullable(),
   isRecurring: z.boolean(),
   frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']).optional(),
@@ -187,14 +187,23 @@ export default function AssignTasksPage() {
             dueDate: data.dueDate || null,
           });
         } else {
-          await api.post('/tasks', {
+          const payload = {
             title: data.title,
             description: data.description,
             priority: data.priority,
-            assigneeId: data.assigneeId,
+            assigneeIds: data.assigneeIds && data.assigneeIds.length > 0 
+              ? data.assigneeIds 
+              : data.assigneeId ? [data.assigneeId] : [],
             dueDate: data.dueDate || null,
             status: 'TODO'
-          });
+          };
+
+          if (payload.assigneeIds.length === 0) {
+            addToast('Please select at least one assignee', 'error');
+            return;
+          }
+
+          await api.post('/tasks', payload);
         }
       }
       addToast(editingTask ? 'Task updated successfully!' : 'Task assigned successfully!', 'success');
@@ -607,14 +616,33 @@ export default function AssignTasksPage() {
                   ) : (
                     <>
                       <div>
-                         <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-widest leading-none">Assignee</label>
-                         <select {...register('assigneeId')} className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 transition-all outline-none">
-                            <option value="" disabled>Select Member...</option>
+                         <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-widest leading-none">Assignees</label>
+                            <div className="flex items-center gap-2">
+                               <button type="button" onClick={selectAllMembers} className="text-[10px] font-bold text-primary hover:underline">Select All</button>
+                               <span className="text-[10px] text-muted-foreground/30">|</span>
+                               <button type="button" onClick={unselectAllMembers} className="text-[10px] font-bold text-muted-foreground hover:underline">Clear</button>
+                            </div>
+                         </div>
+                         <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl border border-border bg-background custom-scrollbar">
                             {teamSummary.map(m => (
-                              <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                               <label key={m.id} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${selectedAssigneeIds.includes(m.id) ? 'bg-primary/5 border-primary/20' : 'border-transparent hover:bg-muted'}`}>
+                                  <input 
+                                     type="checkbox" 
+                                     checked={selectedAssigneeIds.includes(m.id)}
+                                     onChange={() => toggleAssignee(m.id)}
+                                     className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+                                  />
+                                  <div className="flex flex-col min-w-0">
+                                     <span className="text-xs font-bold text-foreground truncate">{m.name}</span>
+                                     <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{m.role}</span>
+                                  </div>
+                               </label>
                             ))}
-                         </select>
-                         <InputError message={errors.assigneeId?.message} />
+                            {teamSummary.length === 0 && (
+                               <p className="text-[10px] text-muted-foreground italic text-center py-2">No subordinates available</p>
+                            )}
+                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                          <div>

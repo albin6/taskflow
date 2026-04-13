@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsDateString, IsArray } from 'class-validator';
 import { IsNotPastDate } from '../../common/decorators/is-not-past-date.decorator';
 import { TaskStatus, TaskPriority } from '../../common/enums';
 
@@ -25,8 +25,13 @@ export class CreateTaskDto {
   dueDate?: string;
 
   @IsUUID()
-  @IsNotEmpty({ message: 'At least one team member must be assigned to the task' })
-  assigneeId: string;
+  @IsOptional()
+  assigneeId?: string;
+
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  assigneeIds?: string[];
 }
 
 export class UpdateTaskDto {

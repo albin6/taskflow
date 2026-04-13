@@ -20,12 +20,9 @@ export class TasksService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(createTaskDto: CreateTaskDto, actor: any): Promise<Task> {
-    const { title, description, status, priority, dueDate, assigneeId } = createTaskDto;
+  async create(createTaskDto: CreateTaskDto, actor: any): Promise<Task | Task[]> {
+    const { title, description, status, priority, dueDate, assigneeId, assigneeIds } = createTaskDto;
 
-    // 1. Determine Team
-    // If actor is Admin (level 0), they can skip having a teamId generally, but tasks MUST belong to a team.
-    // For now we assume creators have a team or actor has teamId attached from decorator context.
     const teamId = actor.teamId; 
     if (!teamId) {
        throw new ForbiddenException('Global Admins must specify or act within a team scope context for tasks.');
@@ -34,39 +31,50 @@ export class TasksService {
     const team = await this.teamRepository.findOne({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found for task setup.');
 
-    let assignee: User | null = null;
-    if (assigneeId) {
-       assignee = await this.userRepository.findOne({ where: { id: assigneeId }, relations: ['role', 'team'] });
-       if (!assignee) throw new NotFoundException(`Assignee with ID "${assigneeId}" not found.`);
-       if (assignee.team?.id !== teamId) {
-          throw new ConflictException('Assignee must belong to the same team.');
-       }
+    const idList = assigneeIds && assigneeIds.length > 0 
+      ? assigneeIds 
+      : (assigneeId ? [assigneeId] : []);
 
-       // Hierarchy Check: Cannot assign to SUPERIORS (lower number)
-       const assigneeLevel = assignee.role?.level ?? 99;
-       if (assigneeLevel < actor.level && actor.level !== 0) {
-          throw new ForbiddenException('Cannot assign tasks to members with a higher role level (Superiors).');
-       }
-
-       // Status Check: Cannot assign to PENDING/REJECTED/SUSPENDED users
-       if (assignee.status !== UserStatus.ACTIVE) {
-          throw new ConflictException('Cannot assign tasks to members who are not approved/active.');
-       }
+    if (idList.length === 0) {
+       throw new ConflictException('At least one assignee is required for task creation.');
     }
 
-    const task = this.taskRepository.create({
-      title,
-      description,
-      status: status || undefined,
-      priority: priority || undefined,
-      dueDate: dueDate ? new Date(dueDate) : undefined,
-      assignee,
-      assigner: assignee ? ({ id: actor.userId } as any) : null,
-      creator: { id: actor.userId } as any,
-      team,
-    });
+    const tasksToCreate: Partial<Task>[] = [];
 
-    return this.taskRepository.save(task);
+    for (const id of idList) {
+       const assignee = await this.userRepository.findOne({ where: { id }, relations: ['role', 'team'] });
+       if (!assignee) throw new NotFoundException(`Assignee with ID "${id}" not found.`);
+       
+       if (assignee.team?.id !== teamId) {
+          throw new ConflictException(`Assignee "${assignee.name}" must belong to the same team.`);
+       }
+
+       const assigneeLevel = assignee.role?.level ?? 99;
+       if (assigneeLevel < actor.level && actor.level !== 0) {
+          throw new ForbiddenException(`Cannot assign tasks to "${assignee.name}" as they have a higher role level.`);
+       }
+
+       if (assignee.status !== UserStatus.ACTIVE) {
+          throw new ConflictException(`Cannot assign tasks to "${assignee.name}" who is not currently active.`);
+       }
+
+       tasksToCreate.push({
+         title,
+         description,
+         status: status || undefined,
+         priority: priority || undefined,
+         dueDate: dueDate ? new Date(dueDate) : undefined,
+         assignee,
+         assigner: { id: actor.userId } as any,
+         creator: { id: actor.userId } as any,
+         team,
+       });
+    }
+
+    const createdTasks = this.taskRepository.create(tasksToCreate);
+    const savedTasks = await this.taskRepository.save(createdTasks);
+    
+    return savedTasks.length === 1 ? savedTasks[0] : savedTasks;
   }
 
   async findAll(actor: any, page = 1, limit = 20, filterByAssigneeId?: string, filterByCreatorId?: string): Promise<{ tasks: Task[], total: number }> {
