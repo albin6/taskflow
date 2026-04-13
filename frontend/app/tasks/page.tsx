@@ -24,6 +24,40 @@ const taskSchema = z.object({
   daysOfWeek: z.array(z.string()).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional().nullable(),
+}).refine((data) => {
+  if (!data.isRecurring && data.dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(data.dueDate);
+    due.setHours(0, 0, 0, 0);
+    return due >= today;
+  }
+  return true;
+}, {
+  message: 'Due date cannot be in the past',
+  path: ['dueDate'],
+}).refine((data) => {
+  if (data.isRecurring && data.startDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(data.startDate);
+    start.setHours(0, 0, 0, 0);
+    return start >= today;
+  }
+  return true;
+}, {
+  message: 'Start date cannot be in the past',
+  path: ['startDate'],
+}).refine((data) => {
+  if (data.isRecurring && data.startDate && data.endDate) {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    return end >= start;
+  }
+  return true;
+}, {
+  message: 'End date must be after or equal to start date',
+  path: ['endDate'],
 });
 
 type TaskFormValues = z.infer<typeof taskSchema>;
@@ -564,7 +598,18 @@ export default function TasksPage() {
                              type="date"
                              className="w-full px-3 py-2 rounded-xl border border-primary/20 bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 shadow-sm transition-all"
                           />
+                          <InputError message={errors.startDate?.message} />
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-primary mb-1.5 uppercase tracking-widest">End Date (Optional)</label>
+                        <input 
+                           {...register('endDate')}
+                           type="date"
+                           className="w-full px-3 py-2 rounded-xl border border-primary/20 bg-background text-sm font-bold focus:ring-2 focus:ring-primary/20 shadow-sm transition-all"
+                        />
+                        <InputError message={errors.endDate?.message} />
                       </div>
 
                       {frequency === 'WEEKLY' && (
@@ -626,6 +671,7 @@ export default function TasksPage() {
                             />
                             <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                          </div>
+                         <InputError message={errors.dueDate?.message} />
                       </div>
                     </>
                   )}

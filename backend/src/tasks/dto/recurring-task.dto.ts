@@ -1,4 +1,5 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString, IsArray, IsUUID, IsDateString, IsBoolean } from 'class-validator';
+import { IsNotPastDate } from '../../common/decorators/is-not-past-date.decorator';
 import { RecurrenceFrequency, TaskPriority } from '../../common/enums';
 
 export class CreateRecurringTaskDto {
@@ -24,6 +25,7 @@ export class CreateRecurringTaskDto {
   daysOfWeek?: string[]; // e.g. ["MONDAY", "SATURDAY"]
 
   @IsDateString()
+  @IsNotPastDate({ message: 'Start date cannot be in the past' })
   @IsNotEmpty()
   startDate: string;
 

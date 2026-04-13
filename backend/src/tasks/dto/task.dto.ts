@@ -1,4 +1,5 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import { IsNotPastDate } from '../../common/decorators/is-not-past-date.decorator';
 import { TaskStatus, TaskPriority } from '../../common/enums';
 
 export class CreateTaskDto {
@@ -19,6 +20,7 @@ export class CreateTaskDto {
   priority?: TaskPriority;
 
   @IsDateString()
+  @IsNotPastDate({ message: 'Due date cannot be in the past' })
   @IsOptional()
   dueDate?: string;
 
@@ -45,6 +47,7 @@ export class UpdateTaskDto {
   priority?: TaskPriority;
 
   @IsDateString()
+  @IsNotPastDate({ message: 'Due date cannot be in the past' })
   @IsOptional()
   dueDate?: string;
 
