@@ -86,6 +86,12 @@ export class UsersService {
       });
     }
 
+    if (queryDto?.permission) {
+      query.andWhere('role.permissions @> :permission', {
+        permission: JSON.stringify([queryDto.permission]),
+      });
+    }
+
     // Sorting
     const allowedSortFields = ['name', 'email', 'status', 'createdAt', 'role.name'];
     const actualSortField = allowedSortFields.includes(sortBy) ? (sortBy.includes('.') ? sortBy : `user.${sortBy}`) : 'user.name';

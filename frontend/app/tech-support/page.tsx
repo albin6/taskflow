@@ -6,28 +6,17 @@ import {
   ArrowUpAZ,
   Headset,
   Loader2,
+  Pencil,
   Search,
   ShieldCheck,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import api from '../../lib/axios';
+import EditTicketModal from './components/EditTicketModal';
+import TicketDetailView from './components/TicketDetailView';
+import SupportAnalytics from './components/SupportAnalytics';
+import { TechSupportTicket } from './types';
 
-interface TechSupportTicket {
-  rowIndex: number;
-  timestamp: string;
-  email: string;
-  name: string;
-  contactNo: string;
-  batchNo: string;
-  domain: string;
-  module: string;
-  description: string;
-  assignedTo: string;
-  firstCallTime: string;
-  firstCallStatus: string;
-  dateOfSecondCall: string;
-  secondCallStatus: string;
-}
 
 const SORT_OPTIONS = [
   { value: 'timestamp', label: 'Timestamp' },
@@ -54,6 +43,9 @@ export default function TechSupportPage() {
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<TechSupportTicket | null>(null);
 
   const fetchTickets = async () => {
     if (!hasAccess) return;
@@ -222,26 +214,22 @@ export default function TechSupportPage() {
         </select>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Headset className="h-6 w-6" />
-          </div>
-          <h2 className="text-lg font-semibold text-foreground">Support Queue</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Total rows available from the connected sheet: <span className="font-semibold text-foreground">{meta.total}</span>
-          </p>
-        </div>
+      <SupportAnalytics />
 
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
-            {sortOrder === 'ASC' ? <ArrowUpAZ className="h-6 w-6" /> : <ArrowDownAZ className="h-6 w-6" />}
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
+              {sortOrder === 'ASC' ? <ArrowUpAZ className="h-6 w-6" /> : <ArrowDownAZ className="h-6 w-6" />}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Sorting Options</h2>
+              <p className="text-sm text-muted-foreground">
+                {SORT_OPTIONS.find((option) => option.value === sortBy)?.label || 'Timestamp'} in {sortOrder} order
+              </p>
+            </div>
           </div>
-          <h2 className="text-lg font-semibold text-foreground">Current Sort</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {SORT_OPTIONS.find((option) => option.value === sortBy)?.label || 'Timestamp'} in {sortOrder} order
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <select
               value={sortBy}
               onChange={(event) => setSortBy(event.target.value)}
@@ -275,6 +263,7 @@ export default function TechSupportPage() {
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">First Call</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Second Call</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Issue</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -301,7 +290,14 @@ export default function TechSupportPage() {
                 </tr>
               ) : (
                 tickets.map((ticket) => (
-                  <tr key={ticket.rowIndex} className="align-top hover:bg-muted/20">
+                  <tr 
+                    key={ticket.rowIndex} 
+                    className="align-top hover:bg-muted/20 cursor-pointer group"
+                    onClick={() => {
+                      setSelectedTicket(ticket);
+                      setIsDetailOpen(true);
+                    }}
+                  >
                     <td className="px-4 py-4 text-sm text-foreground">{ticket.timestamp || '-'}</td>
                     <td className="px-4 py-4 text-sm">
                       <div className="font-medium text-foreground">{ticket.name || '-'}</div>
@@ -324,6 +320,19 @@ export default function TechSupportPage() {
                     </td>
                     <td className="max-w-xl px-4 py-4 text-sm text-muted-foreground">
                       <div className="line-clamp-3">{ticket.description || '-'}</div>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTicket(ticket);
+                          setIsModalOpen(true);
+                        }}
+                        className="rounded-lg p-2 text-muted-foreground transition-all hover:bg-primary/10 hover:text-primary opacity-0 group-hover:opacity-100"
+                        title="Edit Ticket"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -355,6 +364,33 @@ export default function TechSupportPage() {
           </div>
         </div>
       </div>
+
+      {selectedTicket && (
+        <EditTicketModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            if (!isDetailOpen) setSelectedTicket(null);
+          }}
+          onSuccess={fetchTickets}
+          ticket={selectedTicket}
+        />
+      )}
+
+      {selectedTicket && (
+        <TicketDetailView
+          isOpen={isDetailOpen}
+          onClose={() => {
+            setIsDetailOpen(false);
+            setSelectedTicket(null);
+          }}
+          onEdit={() => {
+            setIsDetailOpen(false);
+            setIsModalOpen(true);
+          }}
+          ticket={selectedTicket}
+        />
+      )}
     </div>
   );
 }

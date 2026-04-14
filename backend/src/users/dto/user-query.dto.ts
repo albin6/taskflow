@@ -34,4 +34,8 @@ export class UserQueryDto {
   @IsOptional()
   @IsString()
   teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  permission?: string;
 }

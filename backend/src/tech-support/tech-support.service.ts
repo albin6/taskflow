@@ -9,6 +9,19 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { createSign } from 'crypto';
 import { TechSupportQueryDto } from './dto/tech-support-query.dto';
+import { UpdateTechSupportDto } from './dto/update-tech-support.dto';
+
+interface DriveUploadResponse {
+  id: string;
+  webViewLink: string;
+}
+
+export interface TechSupportAnalytics {
+  totalTickets: number;
+  statusDistribution: Record<string, number>;
+  domainDistribution: Record<string, number>;
+  assigneeDistribution: Record<string, number>;
+}
 
 type SortableField =
   | 'timestamp'
@@ -83,6 +96,143 @@ export class TechSupportService {
     };
   }
 
+  async update(rowIndex: number, updateDto: UpdateTechSupportDto, file?: any) {
+    const spreadsheetId = this.configService.get<string>('GOOGLE_SHEETS_SPREADSHEET_ID');
+    const accessToken = await this.getGoogleAccessToken();
+
+    // 1. Handle Audio Upload if file is present
+    let driveLink = updateDto.remarks === 'Audio Recording is not Available' ? 'Audio Recording is not Available' : '';
+    
+    if (file) {
+      const uploadResult = await this.uploadToDrive(file);
+      driveLink = uploadResult.webViewLink;
+    } else if (!driveLink && !updateDto.remarks) {
+       // If no file and no manual text, we keep it empty or as-is? 
+       // User requirement: if not available provide "Audio Recording is not Available"
+       // We'll only set this if the user specifically didn't upload anything in a new interaction.
+    }
+
+    // 2. Fetch current row to preserve other columns (though we are using targeted update)
+    // To maintain integrity, we'll update specific columns:
+    // assignedTo: J (index 10 in 1-based, index 9 in 0-based)
+    // firstCallStatus: L (index 12 in 1-based, index 11 in 0-based)
+    // firstCallRecordingLink: M (index 13 in 1-based, index 12 in 0-based)
+    // firstCallRemarks: N (index 14 in 1-based, index 13 in 0-based)
+
+    const updates: any[] = [];
+    if (updateDto.assignedTo !== undefined) {
+      updates.push({ range: `J${rowIndex}`, values: [[updateDto.assignedTo]] });
+    }
+    if (updateDto.status !== undefined) {
+      updates.push({ range: `L${rowIndex}`, values: [[updateDto.status]] });
+    }
+    if (driveLink) {
+      updates.push({ range: `M${rowIndex}`, values: [[driveLink]] });
+    } else if (file === undefined && updateDto.status === 'resolved') {
+        // Optional: logic for auto-filling "Audio Recording is not Available" if resolving without audio
+    }
+    
+    if (updateDto.remarks !== undefined) {
+      updates.push({ range: `N${rowIndex}`, values: [[updateDto.remarks]] });
+    }
+
+    if (updates.length > 0) {
+      const endpoint = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          valueInputOption: 'USER_ENTERED',
+          data: updates,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new InternalServerErrorException(`Failed to update Google Sheet. ${body}`);
+      }
+    }
+
+    // Invalidate cache
+    await this.cacheManager.del(this.rawSheetCacheKey);
+    return { success: true };
+  }
+
+  private async uploadToDrive(file: any): Promise<DriveUploadResponse> {
+    const folderId = this.configService.get<string>('GOOGLE_DRIVE_FOLDER_ID');
+    const accessToken = await this.getGoogleAccessToken();
+
+    const metadata = {
+      name: `recording_${Date.now()}_${file.originalname}`,
+      parents: folderId ? [folderId] : [],
+    };
+
+    const formData = new FormData();
+    formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    formData.append('file', new Blob([file.buffer], { type: file.mimetype }));
+
+    // Google Drive Multipart upload
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new InternalServerErrorException(`Failed to upload to Google Drive. ${body}`);
+    }
+
+    const driveFile = await response.json() as DriveUploadResponse;
+
+    // Make file readable by anyone with the link (optional but usually needed for the link to work in UI)
+    await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: 'reader',
+        type: 'anyone',
+      }),
+    });
+
+    return driveFile;
+  }
+
+  async getAnalytics(): Promise<TechSupportAnalytics> {
+    const tickets = await this.getNormalizedTickets();
+
+    const stats: TechSupportAnalytics = {
+      totalTickets: tickets.length,
+      statusDistribution: {},
+      domainDistribution: {},
+      assigneeDistribution: {},
+    };
+
+    tickets.forEach((t) => {
+      // Status
+      const status = (t.firstCallStatus || 'Pending').toLowerCase();
+      stats.statusDistribution[status] = (stats.statusDistribution[status] || 0) + 1;
+
+      // Domain
+      const domain = t.domain || 'Unknown';
+      stats.domainDistribution[domain] = (stats.domainDistribution[domain] || 0) + 1;
+
+      // Assignee
+      const assignee = t.assignedTo || 'Unassigned';
+      stats.assigneeDistribution[assignee] = (stats.assigneeDistribution[assignee] || 0) + 1;
+    });
+
+    return stats;
+  }
+
   private async getNormalizedTickets(): Promise<TechSupportTicket[]> {
     const cached = await this.cacheManager.get<TechSupportTicket[]>(this.rawSheetCacheKey);
     if (cached) {
@@ -151,7 +301,10 @@ export class TechSupportService {
 
     const assertion = this.signJwt({
       iss: clientEmail,
-      scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+      scope: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file'
+      ].join(' '),
       aud: 'https://oauth2.googleapis.com/token',
       exp: expiresAt,
       iat: now,
