@@ -20,6 +20,7 @@ const ALL_PERMISSIONS = [
   { id: 'APPROVE_REGISTRATIONS', label: 'Approve Registrations' },
   { id: 'VIEW_GLOBAL_AUDIT', label: 'View Global Audit Log' },
   { id: 'VIEW_TEAM_AUDIT', label: 'View Team Audit Log' },
+  { id: 'TECH_SUPPORT', label: 'Tech Support' },
   { id: 'VIEW_TASKS', label: 'View Tasks' },
   { id: 'CREATE_TASK', label: 'Create Tasks' },
   { id: 'EDIT_TASK', label: 'Edit Tasks' },

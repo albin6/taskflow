@@ -11,6 +11,7 @@ import {
   Settings, 
   CheckSquare,
   ClipboardList,
+  Headset,
   LogOut 
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -77,6 +78,12 @@ export default function Sidebar() {
       icon: FileText,
       href: '/team/audit-log',
       visible: user.level > 0 && user.level <= 2,
+    },
+    {
+      label: 'Tech Support',
+      icon: Headset,
+      href: '/tech-support',
+      visible: user.level === 0 || user.permissions?.includes('TECH_SUPPORT'),
     },
   ];
 

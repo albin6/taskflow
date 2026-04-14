@@ -13,6 +13,7 @@ const ALL_PERMISSIONS = [
   { id: 'MANAGE_USERS', label: 'Manage Users' },
   { id: 'APPROVE_REGISTRATIONS', label: 'Approve Registrations' },
   { id: 'VIEW_TEAM_AUDIT', label: 'View Team Audit Log' },
+  { id: 'TECH_SUPPORT', label: 'Tech Support' },
   { id: 'CREATE_TASK', label: 'Create Tasks' },
   { id: 'EDIT_TASK', label: 'Edit Tasks' },
   { id: 'DELETE_TASK', label: 'Delete Tasks' },

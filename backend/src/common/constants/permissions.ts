@@ -16,6 +16,9 @@ export const Permissions = {
   VIEW_GLOBAL_AUDIT: 'VIEW_GLOBAL_AUDIT',
   VIEW_TEAM_AUDIT: 'VIEW_TEAM_AUDIT',
 
+  // Tech Support
+  TECH_SUPPORT: 'TECH_SUPPORT',
+
   // Tasks
   CREATE_TASK: 'CREATE_TASK',
   EDIT_TASK: 'EDIT_TASK',
