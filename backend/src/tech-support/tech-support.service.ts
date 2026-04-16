@@ -7,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { createSign } from 'crypto';
 import { TechSupportQueryDto } from './dto/tech-support-query.dto';
 import { UpdateTechSupportDto } from './dto/update-tech-support.dto';
 
@@ -288,27 +287,13 @@ export class TechSupportService {
       return this.accessTokenCache.token;
     }
 
-    const clientEmail = this.configService.get<string>('GOOGLE_SHEETS_CLIENT_EMAIL');
-    const privateKeyRaw = this.configService.get<string>('GOOGLE_SHEETS_PRIVATE_KEY');
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    const refreshToken = this.configService.get<string>('GOOGLE_REFRESH_TOKEN');
 
-    if (!clientEmail || !privateKeyRaw) {
-      throw new InternalServerErrorException('Google Sheets credentials are missing.');
+    if (!clientId || !clientSecret || !refreshToken) {
+      throw new InternalServerErrorException('Google OAuth2 credentials (Client ID, Secret, or Refresh Token) are missing.');
     }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
-    const now = Math.floor(Date.now() / 1000);
-    const expiresAt = now + 3600;
-
-    const assertion = this.signJwt({
-      iss: clientEmail,
-      scope: [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive.file'
-      ].join(' '),
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: expiresAt,
-      iat: now,
-    }, privateKey);
 
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -316,14 +301,16 @@ export class TechSupportService {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion,
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
       }),
     });
 
     if (!response.ok) {
       const body = await response.text();
-      throw new ServiceUnavailableException(`Failed to obtain Google access token. ${body}`);
+      throw new ServiceUnavailableException(`Failed to obtain Google access token via refresh token. ${body}`);
     }
 
     const tokenResponse = (await response.json()) as {
@@ -339,27 +326,6 @@ export class TechSupportService {
     return tokenResponse.access_token;
   }
 
-  private signJwt(payload: Record<string, string | number>, privateKey: string): string {
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const encodedHeader = this.base64UrlEncode(JSON.stringify(header));
-    const encodedPayload = this.base64UrlEncode(JSON.stringify(payload));
-    const unsignedToken = `${encodedHeader}.${encodedPayload}`;
-
-    const signer = createSign('RSA-SHA256');
-    signer.update(unsignedToken);
-    signer.end();
-
-    const signature = signer.sign(privateKey);
-    return `${unsignedToken}.${this.base64UrlEncode(signature)}`;
-  }
-
-  private base64UrlEncode(input: string | Buffer): string {
-    return Buffer.from(input)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/g, '');
-  }
 
   private isHeaderRow(row: string[]): boolean {
     const firstCell = (row[0] ?? '').trim().toLowerCase();
