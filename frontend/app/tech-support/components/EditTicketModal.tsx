@@ -24,6 +24,44 @@ const TICKET_STATUSES = [
   { value: 'resolved', label: 'Resolved' },
 ];
 
+/**
+ * Converts various date formats (like 18/04/2026 15:35:38) to datetime-local format (YYYY-MM-DDTHH:MM)
+ */
+function toDatetimeLocal(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  // Try cleaning the string (handles "at", non-breaking spaces, etc.)
+  const cleaned = dateStr.replace(/\u202f/g, ' ').replace(/\s+/g, ' ').replace(' at ', ' ').trim();
+  
+  // Try standard parsing
+  let date = new Date(cleaned);
+  
+  // If standard parsing fails, try manual parsing for DD/MM/YYYY
+  if (isNaN(date.getTime())) {
+    const parts = cleaned.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?: (\d{1,2}):(\d{1,2}))?/);
+    if (parts) {
+      const [_, d, m, y, h = '00', min = '00'] = parts;
+      date = new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${h.padStart(2, '0')}:${min.padStart(2, '0')}`);
+    }
+  }
+
+  if (isNaN(date.getTime())) return '';
+
+  // Return in YYYY-MM-DDTHH:MM format
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * Converts datetime-local value back to sheet-friendly format (DD/MM/YYYY HH:MM:SS)
+ */
+function fromDatetimeLocal(val: string): string {
+  if (!val) return '';
+  const [date, time] = val.split('T');
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y} ${time}:00`;
+}
+
 export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: EditTicketModalProps) {
   const [loading, setLoading] = useState(false);
   const [fetchingUsers, setFetchingUsers] = useState(false);
@@ -32,7 +70,7 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
     assignedTo: ticket.assignedTo || '',
     status: ticket.firstCallStatus?.toLowerCase() || 'pending',
     remarks: ticket.firstCallRemarks || '',
-    resolvedTime: ticket.firstCallTime || '',
+    resolvedTime: toDatetimeLocal(ticket.firstCallTime || ticket.timestamp),
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -45,7 +83,7 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
         assignedTo: ticket.assignedTo || '',
         status: ticket.firstCallStatus?.toLowerCase() || 'pending',
         remarks: ticket.firstCallRemarks || '',
-        resolvedTime: ticket.firstCallTime || '',
+        resolvedTime: toDatetimeLocal(ticket.firstCallTime || ticket.timestamp),
       });
       setSelectedFile(null);
       setError('');
@@ -82,7 +120,7 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
     submitData.append('assignedTo', formData.assignedTo);
     submitData.append('status', formData.status);
     submitData.append('remarks', formData.remarks || (selectedFile ? '' : 'Audio Recording is not Available'));
-    submitData.append('resolvedTime', formData.resolvedTime);
+    submitData.append('resolvedTime', fromDatetimeLocal(formData.resolvedTime));
     
     if (selectedFile) {
       submitData.append('audio', selectedFile);
@@ -181,16 +219,16 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
             </div>
           </div>
           
+          
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Resolved Time & Date</label>
+            <label className="text-sm font-medium text-foreground">Resolved Time & Date (24h)</label>
             <input
-              type="text"
-              className="w-full rounded-xl border border-border bg-background py-2.5 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="e.g. 18/04/2026 15:35:38"
+              type="datetime-local"
+              className="w-full rounded-xl border border-border bg-background py-2.5 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20 appearance-none"
               value={formData.resolvedTime}
               onChange={(e) => setFormData({ ...formData, resolvedTime: e.target.value })}
             />
-            <p className="text-[10px] text-muted-foreground px-1">Tip: Use dd/mm/yyyy hh:mm:ss format for sheet consistency.</p>
+            <p className="text-[10px] text-muted-foreground px-1">Defaulted to original ticket timestamp.</p>
           </div>
 
           <div className="space-y-2">
