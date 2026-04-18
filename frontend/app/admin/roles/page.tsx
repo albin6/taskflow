@@ -26,6 +26,7 @@ const ALL_PERMISSIONS = [
   { id: 'EDIT_TASK', label: 'Edit Tasks' },
   { id: 'DELETE_TASK', label: 'Delete Tasks' },
   { id: 'ASSIGN_TASK', label: 'Assign Tasks' },
+  { id: 'VIEW_KPI', label: 'View KPI Analytics' },
 ];
 
 const roleSchema = z.object({

@@ -17,6 +17,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import { TasksModule } from './tasks/tasks.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { TechSupportModule } from './tech-support/tech-support.module';
+import { KpiModule } from './kpi/kpi.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -82,6 +83,7 @@ import { APP_GUARD } from '@nestjs/core';
     AuditModule,
     TasksModule,
     TechSupportModule,
+    KpiModule,
     ObservabilityModule,
   ],
   controllers: [AppController],

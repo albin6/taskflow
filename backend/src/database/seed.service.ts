@@ -88,6 +88,12 @@ export class SeedService implements OnModuleInit {
           role.permissions.push('VIEW_TEAMS');
           changed = true;
         }
+
+        // 3. Grant KPI visibility to Managers
+        if (!role.permissions.includes('VIEW_KPI')) {
+          role.permissions.push('VIEW_KPI');
+          changed = true;
+        }
       }
 
       if (changed) {

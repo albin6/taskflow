@@ -12,7 +12,8 @@ import {
   CheckSquare,
   ClipboardList,
   Headset,
-  LogOut 
+  LogOut,
+  TrendingUp
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -84,6 +85,12 @@ export default function Sidebar() {
       icon: Headset,
       href: '/tech-support',
       visible: user.level === 0 || user.permissions?.includes('TECH_SUPPORT'),
+    },
+    {
+      label: 'KPI',
+      icon: TrendingUp,
+      href: '/kpi',
+      visible: user.level === 0 || user.permissions?.includes('VIEW_KPI'),
     },
   ];
 
