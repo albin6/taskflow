@@ -31,7 +31,8 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
   const [formData, setFormData] = useState({
     assignedTo: ticket.assignedTo || '',
     status: ticket.firstCallStatus?.toLowerCase() || 'pending',
-    remarks: '',
+    remarks: ticket.firstCallRemarks || '',
+    resolvedTime: ticket.firstCallTime || '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -43,7 +44,8 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
       setFormData({
         assignedTo: ticket.assignedTo || '',
         status: ticket.firstCallStatus?.toLowerCase() || 'pending',
-        remarks: '',
+        remarks: ticket.firstCallRemarks || '',
+        resolvedTime: ticket.firstCallTime || '',
       });
       setSelectedFile(null);
       setError('');
@@ -80,6 +82,7 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
     submitData.append('assignedTo', formData.assignedTo);
     submitData.append('status', formData.status);
     submitData.append('remarks', formData.remarks || (selectedFile ? '' : 'Audio Recording is not Available'));
+    submitData.append('resolvedTime', formData.resolvedTime);
     
     if (selectedFile) {
       submitData.append('audio', selectedFile);
@@ -176,6 +179,18 @@ export default function EditTicketModal({ isOpen, onClose, onSuccess, ticket }: 
                 </button>
               ))}
             </div>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Resolved Time & Date</label>
+            <input
+              type="text"
+              className="w-full rounded-xl border border-border bg-background py-2.5 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder="e.g. 18/04/2026 15:35:38"
+              value={formData.resolvedTime}
+              onChange={(e) => setFormData({ ...formData, resolvedTime: e.target.value })}
+            />
+            <p className="text-[10px] text-muted-foreground px-1">Tip: Use dd/mm/yyyy hh:mm:ss format for sheet consistency.</p>
           </div>
 
           <div className="space-y-2">

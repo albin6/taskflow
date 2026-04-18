@@ -134,6 +134,9 @@ export class TechSupportService {
     if (updateDto.remarks !== undefined) {
       updates.push({ range: `N${rowIndex}`, values: [[updateDto.remarks]] });
     }
+    if (updateDto.resolvedTime !== undefined) {
+      updates.push({ range: `K${rowIndex}`, values: [[updateDto.resolvedTime]] });
+    }
 
     if (updates.length > 0) {
       const endpoint = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`;

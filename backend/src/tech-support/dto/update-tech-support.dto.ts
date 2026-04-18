@@ -18,4 +18,8 @@ export class UpdateTechSupportDto {
   @IsString()
   @IsOptional()
   remarks?: string;
+
+  @IsString()
+  @IsOptional()
+  resolvedTime?: string;
 }
